@@ -28,7 +28,18 @@ import {
   Scissors,
   Clipboard,
   Undo,
-  Redo
+  Redo,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Link,
+  Maximize,
+  Minimize,
+  ArrowRight
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -42,7 +53,7 @@ interface EditPdfEditorProps {
   onOptionsChange: (options: any) => void;
 }
 
-type ToolType = "select" | "text" | "rectangle" | "circle" | "line" | "highlight" | "freehand" | "snip";
+type ToolType = "select" | "text" | "rectangle" | "circle" | "line" | "highlight" | "freehand" | "snip" | "arrow";
 type SnipShape = "rectangle" | "square" | "circle" | "freehand";
 
 interface Annotation {
@@ -59,6 +70,11 @@ interface Annotation {
   filled?: boolean;
   fontSize?: number;
   fontFamily?: string;
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline" | "line-through";
+  textAlign?: "left" | "center" | "right";
+  link?: string;
   points?: { x: number; y: number }[];
   endX?: number;
   endY?: number;
@@ -116,6 +132,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [snipPoints, setSnipPoints] = useState<{ x: number; y: number }[]>([]);
   const [history, setHistory] = useState<Annotation[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -600,7 +619,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       fontFamily,
     };
 
-    if (selectedTool === "line") {
+    if (selectedTool === "line" || selectedTool === "arrow") {
       newAnnotation.x = drawStart.x;
       newAnnotation.y = drawStart.y;
       newAnnotation.endX = pos.x;
@@ -709,6 +728,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     { id: "rectangle", icon: Square, label: "Rect" },
     { id: "circle", icon: Circle, label: "Circle" },
     { id: "line", icon: Minus, label: "Line" },
+    { id: "arrow", icon: ArrowRight, label: "Arrow" },
     { id: "highlight", icon: Highlighter, label: "Highlight" },
     { id: "freehand", icon: Pencil, label: "Draw" },
   ];
@@ -760,7 +780,31 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className={`w-full space-y-4 ${isFullscreen ? "fixed inset-0 z-50 bg-background p-4 overflow-auto" : ""}`}>
+      {showLinkInput && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card p-4 rounded-lg shadow-lg w-96">
+            <h3 className="text-lg font-medium mb-4">Add Link to Text</h3>
+            <Input
+              placeholder="https://example.com"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              className="mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowLinkInput(false)}>Cancel</Button>
+              <Button onClick={() => {
+                if (selectedId) {
+                  updateSelectedAnnotation({ link: linkUrl || undefined });
+                }
+                setShowLinkInput(false);
+              }}>
+                {linkUrl ? "Add Link" : "Remove Link"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-card rounded-lg border p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-2 pb-4 border-b">
           {tools.map((tool) => (
@@ -799,6 +843,15 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               title="Redo"
             >
               <Redo className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              data-testid="fullscreen-btn"
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
             </Button>
           </div>
 
@@ -1027,6 +1080,94 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                   />
                   <span className="text-sm">{selectedAnnotation.fontSize}px</span>
                 </div>
+                <div className="flex items-center gap-1 border-l pl-2">
+                  <Button
+                    variant={selectedAnnotation.fontWeight === "bold" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ 
+                      fontWeight: selectedAnnotation.fontWeight === "bold" ? "normal" : "bold" 
+                    })}
+                    title="Bold"
+                  >
+                    <Bold className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant={selectedAnnotation.fontStyle === "italic" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ 
+                      fontStyle: selectedAnnotation.fontStyle === "italic" ? "normal" : "italic" 
+                    })}
+                    title="Italic"
+                  >
+                    <Italic className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant={selectedAnnotation.textDecoration === "underline" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ 
+                      textDecoration: selectedAnnotation.textDecoration === "underline" ? "none" : "underline" 
+                    })}
+                    title="Underline"
+                  >
+                    <Underline className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant={selectedAnnotation.textDecoration === "line-through" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ 
+                      textDecoration: selectedAnnotation.textDecoration === "line-through" ? "none" : "line-through" 
+                    })}
+                    title="Strikethrough"
+                  >
+                    <Strikethrough className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-1 border-l pl-2">
+                  <Button
+                    variant={selectedAnnotation.textAlign === "left" || !selectedAnnotation.textAlign ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ textAlign: "left" })}
+                    title="Align Left"
+                  >
+                    <AlignLeft className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant={selectedAnnotation.textAlign === "center" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ textAlign: "center" })}
+                    title="Align Center"
+                  >
+                    <AlignCenter className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant={selectedAnnotation.textAlign === "right" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => updateSelectedAnnotation({ textAlign: "right" })}
+                    title="Align Right"
+                  >
+                    <AlignRight className="h-3 w-3" />
+                  </Button>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => {
+                    setLinkUrl(selectedAnnotation.link || "");
+                    setShowLinkInput(true);
+                  }}
+                  title="Add Link"
+                >
+                  <Link className="h-3 w-3 mr-1" />
+                  Link
+                </Button>
               </>
             )}
             {(selectedAnnotation.type === "rectangle" || selectedAnnotation.type === "circle") && (
@@ -1173,6 +1314,32 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                 );
               }
 
+              if (ann.type === "arrow") {
+                const dx = (ann.endX || ann.x) - ann.x;
+                const dy = (ann.endY || ann.y) - ann.y;
+                const angle = Math.atan2(dy, dx);
+                const headLen = 12;
+                const x2 = ann.endX || ann.x;
+                const y2 = ann.endY || ann.y;
+                return (
+                  <g key={ann.id}>
+                    <line
+                      x1={ann.x}
+                      y1={ann.y}
+                      x2={x2}
+                      y2={y2}
+                      stroke={ann.color}
+                      strokeWidth={isSelected ? 3 : 2}
+                      strokeDasharray={isSelected ? "5,5" : undefined}
+                    />
+                    <polygon
+                      points={`${x2},${y2} ${x2 - headLen * Math.cos(angle - Math.PI/6)},${y2 - headLen * Math.sin(angle - Math.PI/6)} ${x2 - headLen * Math.cos(angle + Math.PI/6)},${y2 - headLen * Math.sin(angle + Math.PI/6)}`}
+                      fill={ann.color}
+                    />
+                  </g>
+                );
+              }
+
               if (ann.type === "highlight") {
                 return (
                   <g key={ann.id}>
@@ -1221,6 +1388,8 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               }
 
               if (ann.type === "text") {
+                const textAnchor = ann.textAlign === "center" ? "middle" : ann.textAlign === "right" ? "end" : "start";
+                const textX = ann.textAlign === "center" ? ann.x + ann.width / 2 : ann.textAlign === "right" ? ann.x + ann.width : ann.x;
                 return (
                   <g key={ann.id}>
                     {isSelected && (
@@ -1236,11 +1405,17 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                       />
                     )}
                     <text
-                      x={ann.x}
+                      x={textX}
                       y={ann.y + (ann.fontSize || 24)}
                       fill={ann.color}
                       fontSize={ann.fontSize}
                       fontFamily={ann.fontFamily || "Arial"}
+                      fontWeight={ann.fontWeight || "normal"}
+                      fontStyle={ann.fontStyle || "normal"}
+                      textDecoration={ann.textDecoration || "none"}
+                      textAnchor={textAnchor}
+                      style={{ cursor: ann.link ? "pointer" : undefined }}
+                      onClick={ann.link ? () => window.open(ann.link, "_blank") : undefined}
                     >
                       {ann.text}
                     </text>
