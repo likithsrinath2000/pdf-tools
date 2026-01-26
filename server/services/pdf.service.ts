@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, degrees } from 'pdf-lib';
+import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 import { promisify } from 'util';
@@ -197,6 +197,224 @@ export class PDFService {
       pageCount: pdf.getPageCount(),
       size: stats.size,
     };
+  }
+
+  async rotatePDF(inputPath: string, outputPath: string, angle: number): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    
+    const pages = pdf.getPages();
+    pages.forEach(page => {
+      const currentRotation = page.getRotation().angle;
+      page.setRotation(degrees(currentRotation + angle));
+    });
+    
+    const newPdfBytes = await pdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+  }
+
+  async addPageNumbers(
+    inputPath: string, 
+    outputPath: string, 
+    position: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' = 'bottom-center',
+    startFrom: number = 1
+  ): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    
+    const pages = pdf.getPages();
+    pages.forEach((page, idx) => {
+      const { width, height } = page.getSize();
+      const pageNumber = `${idx + startFrom}`;
+      const textWidth = font.widthOfTextAtSize(pageNumber, 12);
+      
+      let x: number, y: number;
+      const margin = 30;
+      
+      switch (position) {
+        case 'top-left':
+          x = margin; y = height - margin;
+          break;
+        case 'top-center':
+          x = (width - textWidth) / 2; y = height - margin;
+          break;
+        case 'top-right':
+          x = width - textWidth - margin; y = height - margin;
+          break;
+        case 'bottom-left':
+          x = margin; y = margin;
+          break;
+        case 'bottom-right':
+          x = width - textWidth - margin; y = margin;
+          break;
+        case 'bottom-center':
+        default:
+          x = (width - textWidth) / 2; y = margin;
+          break;
+      }
+      
+      page.drawText(pageNumber, {
+        x, y,
+        size: 12,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    });
+    
+    const newPdfBytes = await pdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+  }
+
+  async addWatermark(
+    inputPath: string, 
+    outputPath: string, 
+    watermarkText: string,
+    opacity: number = 0.3
+  ): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+    
+    const pages = pdf.getPages();
+    pages.forEach(page => {
+      const { width, height } = page.getSize();
+      const fontSize = Math.min(width, height) / 10;
+      const textWidth = font.widthOfTextAtSize(watermarkText, fontSize);
+      
+      page.drawText(watermarkText, {
+        x: (width - textWidth) / 2,
+        y: height / 2,
+        size: fontSize,
+        font,
+        color: rgb(0.7, 0.7, 0.7),
+        opacity,
+        rotate: degrees(-45),
+      });
+    });
+    
+    const newPdfBytes = await pdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+  }
+
+  async editPDF(
+    inputPath: string, 
+    outputPath: string, 
+    annotations: Array<{
+      type: 'text' | 'rectangle' | 'circle';
+      page: number;
+      x: number;
+      y: number;
+      content?: string;
+      width?: number;
+      height?: number;
+      color?: { r: number; g: number; b: number };
+    }>
+  ): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    
+    const pages = pdf.getPages();
+    
+    for (const annotation of annotations) {
+      const pageIdx = annotation.page - 1;
+      if (pageIdx < 0 || pageIdx >= pages.length) continue;
+      
+      const page = pages[pageIdx];
+      const color = annotation.color ? rgb(annotation.color.r, annotation.color.g, annotation.color.b) : rgb(0, 0, 0);
+      
+      switch (annotation.type) {
+        case 'text':
+          page.drawText(annotation.content || '', {
+            x: annotation.x,
+            y: annotation.y,
+            size: 12,
+            font,
+            color,
+          });
+          break;
+        case 'rectangle':
+          page.drawRectangle({
+            x: annotation.x,
+            y: annotation.y,
+            width: annotation.width || 100,
+            height: annotation.height || 50,
+            borderColor: color,
+            borderWidth: 2,
+          });
+          break;
+        case 'circle':
+          page.drawEllipse({
+            x: annotation.x,
+            y: annotation.y,
+            xScale: (annotation.width || 50) / 2,
+            yScale: (annotation.height || 50) / 2,
+            borderColor: color,
+            borderWidth: 2,
+          });
+          break;
+      }
+    }
+    
+    const newPdfBytes = await pdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+  }
+
+  async signPDF(
+    inputPath: string, 
+    outputPath: string, 
+    signatureText: string,
+    position: { page: number; x: number; y: number }
+  ): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    const font = await pdf.embedFont(StandardFonts.TimesRomanItalic);
+    
+    const pages = pdf.getPages();
+    const pageIdx = position.page - 1;
+    
+    if (pageIdx >= 0 && pageIdx < pages.length) {
+      const page = pages[pageIdx];
+      
+      page.drawText(signatureText, {
+        x: position.x,
+        y: position.y,
+        size: 24,
+        font,
+        color: rgb(0, 0, 0.5),
+      });
+      
+      page.drawLine({
+        start: { x: position.x, y: position.y - 5 },
+        end: { x: position.x + font.widthOfTextAtSize(signatureText, 24), y: position.y - 5 },
+        thickness: 1,
+        color: rgb(0, 0, 0),
+      });
+    }
+    
+    const newPdfBytes = await pdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+  }
+
+  async repairPDF(inputPath: string, outputPath: string): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const repairedBytes = await pdf.save();
+    await fs.writeFile(outputPath, repairedBytes);
+  }
+
+  async convertToPDFA(inputPath: string, outputPath: string): Promise<void> {
+    try {
+      await execPromise(
+        `gs -dPDFA=2 -dBATCH -dNOPAUSE -sColorConversionStrategy=UseDeviceIndependentColor -sDEVICE=pdfwrite -dPDFACompatibilityPolicy=1 -sOutputFile="${outputPath}" "${inputPath}"`
+      );
+    } catch (error) {
+      const pdfBytes = await fs.readFile(inputPath);
+      const pdf = await PDFDocument.load(pdfBytes);
+      const newPdfBytes = await pdf.save();
+      await fs.writeFile(outputPath, newPdfBytes);
+    }
   }
 }
 

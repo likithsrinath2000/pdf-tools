@@ -292,6 +292,34 @@ async function processJobAsync(
         await imageService.convertImageFormat(inputFiles[0].path, outputPath, options.format || 'jpg');
         break;
 
+      case "rotate-pdf":
+        await pdfService.rotatePDF(inputFiles[0].path, outputPath, options.angle || 90);
+        break;
+
+      case "add-page-numbers":
+        await pdfService.addPageNumbers(inputFiles[0].path, outputPath, options.position || 'bottom-center', options.startFrom || 1);
+        break;
+
+      case "add-watermark":
+        await pdfService.addWatermark(inputFiles[0].path, outputPath, options.watermarkText || 'CONFIDENTIAL', options.opacity || 0.3);
+        break;
+
+      case "edit-pdf":
+        await pdfService.editPDF(inputFiles[0].path, outputPath, options.annotations || []);
+        break;
+
+      case "sign-pdf":
+        await pdfService.signPDF(inputFiles[0].path, outputPath, options.signatureText || 'Signature', options.position || { page: 1, x: 100, y: 100 });
+        break;
+
+      case "repair-pdf":
+        await pdfService.repairPDF(inputFiles[0].path, outputPath);
+        break;
+
+      case "pdf-to-pdfa":
+        await pdfService.convertToPDFA(inputFiles[0].path, outputPath);
+        break;
+
       default:
         throw new Error(`Unknown tool: ${toolId}`);
     }
