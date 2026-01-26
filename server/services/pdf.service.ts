@@ -280,6 +280,24 @@ export class PDFService {
     await fs.writeFile(outputPath, newPdfBytes);
   }
 
+  async rotatePages(inputPath: string, outputPath: string, rotations: Record<number, number>): Promise<void> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    
+    const pages = pdf.getPages();
+    pages.forEach((page, idx) => {
+      const pageNum = idx + 1;
+      const rotation = rotations[pageNum];
+      if (rotation !== undefined && rotation !== 0) {
+        const currentRotation = page.getRotation().angle;
+        page.setRotation(degrees(currentRotation + rotation));
+      }
+    });
+    
+    const newPdfBytes = await pdf.save();
+    await fs.writeFile(outputPath, newPdfBytes);
+  }
+
   async addPageNumbers(
     inputPath: string, 
     outputPath: string, 

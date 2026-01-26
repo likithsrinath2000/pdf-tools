@@ -24,6 +24,10 @@ import { SignatureOptions } from "@/components/tools/SignatureOptions";
 import { ResizeOptions } from "@/components/tools/ResizeOptions";
 import { CropOptions } from "@/components/tools/CropOptions";
 import { ExtractPagesOptions } from "@/components/tools/ExtractPagesOptions";
+import { OrganizePdfEditor } from "@/components/tools/OrganizePdfEditor";
+import { ExtractPagesEditor } from "@/components/tools/ExtractPagesEditor";
+import { RotatePagesEditor } from "@/components/tools/RotatePagesEditor";
+import { HtmlToPdfEditor } from "@/components/tools/HtmlToPdfEditor";
 
 type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
 
@@ -148,8 +152,17 @@ export default function ToolPage() {
 
   // Determine if we show the default list or a custom editor
   const renderContent = () => {
-    if (tool.id === "merge-pdf" || tool.id === "organize-pdf" || tool.id === "remove-pages") {
+    if (tool.id === "merge-pdf" || tool.id === "remove-pages") {
       return <MergeEditor files={files} onReorder={handleReorder} onRemove={removeFile} />;
+    }
+
+    if (tool.id === "organize-pdf") {
+      return (
+        <OrganizePdfEditor 
+          files={files} 
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
+      );
     }
     
     if (tool.id === "split-pdf") {
@@ -250,7 +263,16 @@ export default function ToolPage() {
       );
     }
 
-    if (tool.id === "rotate-pdf" || tool.id === "rotate-image") {
+    if (tool.id === "rotate-pdf") {
+      return (
+        <RotatePagesEditor 
+          files={files} 
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
+      );
+    }
+
+    if (tool.id === "rotate-image") {
       return (
         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
           <FileList files={files} onRemove={removeFile} />
@@ -297,12 +319,18 @@ export default function ToolPage() {
 
     if (tool.id === "extract-pages") {
       return (
-        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <FileList files={files} onRemove={removeFile} />
-          <ExtractPagesOptions 
-            onChange={(pages) => setProcessingOptions({ ...processingOptions, pagesToExtract: pages })} 
-          />
-        </div>
+        <ExtractPagesEditor 
+          files={files} 
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
+      );
+    }
+
+    if (tool.id === "html-to-pdf") {
+      return (
+        <HtmlToPdfEditor 
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
       );
     }
 

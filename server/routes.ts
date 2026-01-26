@@ -336,7 +336,11 @@ async function processJobAsync(
         break;
 
       case "rotate-pdf":
-        await pdfService.rotatePDF(inputFiles[0].path, outputPath, options.angle || 90);
+        if (options.rotations && Object.keys(options.rotations).length > 0) {
+          await pdfService.rotatePages(inputFiles[0].path, outputPath, options.rotations);
+        } else {
+          await pdfService.rotatePDF(inputFiles[0].path, outputPath, options.angle || 90);
+        }
         break;
 
       case "add-page-numbers":
