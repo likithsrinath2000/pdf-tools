@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { FileText, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ interface ExtractPagesEditorProps {
 export function ExtractPagesEditor({ files, onOptionsChange }: ExtractPagesEditorProps) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const onOptionsChangeRef = useRef(onOptionsChange);
+  onOptionsChangeRef.current = onOptionsChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -71,8 +73,8 @@ export function ExtractPagesEditor({ files, onOptionsChange }: ExtractPagesEdito
 
   useEffect(() => {
     const pagesToExtract = pages.filter(p => p.selected).map(p => p.pageNumber);
-    onOptionsChange({ pagesToExtract });
-  }, [pages, onOptionsChange]);
+    onOptionsChangeRef.current({ pagesToExtract });
+  }, [pages]);
 
   const togglePage = (pageNumber: number) => {
     setPages(prev => prev.map(p => 

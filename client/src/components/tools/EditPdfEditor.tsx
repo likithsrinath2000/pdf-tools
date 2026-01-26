@@ -120,9 +120,12 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     }
   }, [currentPage, renderPage]);
 
+  const onOptionsChangeRef = useRef(onOptionsChange);
+  onOptionsChangeRef.current = onOptionsChange;
+
   useEffect(() => {
-    onOptionsChange({ annotations, pageCount });
-  }, [annotations, pageCount, onOptionsChange]);
+    onOptionsChangeRef.current({ annotations, pageCount });
+  }, [annotations, pageCount]);
 
   const addToHistory = (newAnnotations: Annotation[]) => {
     const newHistory = history.slice(0, historyIndex + 1);

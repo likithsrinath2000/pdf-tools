@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { FileText, Loader2, RotateCw, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as pdfjsLib from "pdfjs-dist";
@@ -22,6 +22,8 @@ interface RotatePagesEditorProps {
 export function RotatePagesEditor({ files, onOptionsChange }: RotatePagesEditorProps) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const onOptionsChangeRef = useRef(onOptionsChange);
+  onOptionsChangeRef.current = onOptionsChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -73,8 +75,8 @@ export function RotatePagesEditor({ files, onOptionsChange }: RotatePagesEditorP
     pages.forEach(p => {
       rotations[p.pageNumber] = p.rotation;
     });
-    onOptionsChange({ rotations });
-  }, [pages, onOptionsChange]);
+    onOptionsChangeRef.current({ rotations });
+  }, [pages]);
 
   const rotatePage = (pageNumber: number, direction: 'cw' | 'ccw') => {
     setPages(prev => prev.map(p => {

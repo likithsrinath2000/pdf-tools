@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Reorder } from "framer-motion";
 import { FileText, GripVertical, RotateCw, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ interface OrganizePdfEditorProps {
 export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorProps) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const onOptionsChangeRef = useRef(onOptionsChange);
+  onOptionsChangeRef.current = onOptionsChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -79,8 +81,8 @@ export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorP
         rotations[p.pageNumber] = p.rotation;
       }
     });
-    onOptionsChange({ pageOrder, rotations });
-  }, [pages, onOptionsChange]);
+    onOptionsChangeRef.current({ pageOrder, rotations });
+  }, [pages]);
 
   const rotatePage = (id: string, direction: 'cw' | 'ccw') => {
     setPages(prev => prev.map(p => {
