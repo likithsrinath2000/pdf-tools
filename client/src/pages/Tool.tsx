@@ -17,6 +17,13 @@ import { MergeEditor } from "@/components/tools/MergeEditor";
 import { SplitEditor } from "@/components/tools/SplitEditor";
 import { CompressOptions } from "@/components/tools/CompressOptions";
 import { PageNumberEditor } from "@/components/tools/PageNumberEditor";
+import { PasswordOptions } from "@/components/tools/PasswordOptions";
+import { WatermarkOptions } from "@/components/tools/WatermarkOptions";
+import { RotateOptions } from "@/components/tools/RotateOptions";
+import { SignatureOptions } from "@/components/tools/SignatureOptions";
+import { ResizeOptions } from "@/components/tools/ResizeOptions";
+import { CropOptions } from "@/components/tools/CropOptions";
+import { ExtractPagesOptions } from "@/components/tools/ExtractPagesOptions";
 
 type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
 
@@ -133,13 +140,103 @@ export default function ToolPage() {
        return (
          <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
            <FileList files={files} onRemove={removeFile} />
-           <CompressOptions />
+           <CompressOptions onChange={(quality) => setProcessingOptions({ ...processingOptions, quality })} />
          </div>
        );
     }
 
     if (tool.id === "add-page-numbers") {
        return <PageNumberEditor files={files} />;
+    }
+
+    if (tool.id === "protect-pdf") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <PasswordOptions 
+            mode="protect" 
+            onChange={(password) => setProcessingOptions({ ...processingOptions, password })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "unlock-pdf") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <PasswordOptions 
+            mode="unlock" 
+            onChange={(password) => setProcessingOptions({ ...processingOptions, password })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "add-watermark") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <WatermarkOptions 
+            onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "rotate-pdf" || tool.id === "rotate-image") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <RotateOptions 
+            onChange={(angle) => setProcessingOptions({ ...processingOptions, angle })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "sign-pdf") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <SignatureOptions 
+            onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "resize-image") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <ResizeOptions 
+            onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "crop-image") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <CropOptions 
+            onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
+          />
+        </div>
+      );
+    }
+
+    if (tool.id === "extract-pages") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <ExtractPagesOptions 
+            onChange={(pages) => setProcessingOptions({ ...processingOptions, pagesToExtract: pages })} 
+          />
+        </div>
+      );
     }
 
     // Default file list for other tools
