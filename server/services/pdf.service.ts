@@ -91,11 +91,15 @@ export class PDFService {
     const pdf = await PDFDocument.load(pdfBytes);
     const newPdf = await PDFDocument.create();
     
-    const pageIndices = pageOrder.map(p => p - 1);
+    const effectivePageOrder = pageOrder.length > 0 
+      ? pageOrder 
+      : Array.from({ length: pdf.getPageCount() }, (_, i) => i + 1);
+    
+    const pageIndices = effectivePageOrder.map(p => p - 1);
     const pages = await newPdf.copyPages(pdf, pageIndices);
     
     pages.forEach((page, idx) => {
-      const rotation = rotations[pageOrder[idx]] || 0;
+      const rotation = rotations[effectivePageOrder[idx]] || 0;
       if (rotation !== 0) {
         page.setRotation(degrees(rotation));
       }

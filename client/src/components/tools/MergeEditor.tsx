@@ -252,13 +252,14 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
                 <Reorder.Item 
                     key={page.id} 
                     value={page}
-                    className="relative group cursor-grab active:cursor-grabbing w-[120px]"
-                    drag
-                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                    className="relative group cursor-grab active:cursor-grabbing"
                 >
-                   <div className="bg-white border-2 border-slate-100 rounded-lg p-2 hover:border-primary hover:shadow-lg transition-all flex flex-col items-center gap-2 group-active:scale-105 select-none">
+                   <div className="bg-white border-2 border-slate-200 rounded-lg p-3 hover:border-primary hover:shadow-lg transition-all w-[140px]">
+                      <div className="flex justify-center mb-2">
+                        <GripVertical size={16} className="text-slate-300" />
+                      </div>
                       
-                      <div className="w-full aspect-[3/4] bg-slate-50 rounded border overflow-hidden flex items-center justify-center">
+                      <div className="w-full aspect-[3/4] bg-slate-50 rounded border overflow-hidden flex items-center justify-center mb-3">
                         {page.thumbnail ? (
                           <img 
                             src={page.thumbnail} 
@@ -266,35 +267,29 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
                             className="w-full h-full object-contain"
                           />
                         ) : (
-                          <div className="flex flex-col items-center justify-center text-slate-300">
-                            <FileText size={32} />
-                            <span className="text-xs mt-1">Page {page.pageNumber}</span>
-                          </div>
+                          <FileText size={32} className="text-slate-300" />
                         )}
                       </div>
 
-                      <div className="w-full flex flex-col items-center px-1">
-                        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                          Page {page.pageNumber}
-                        </div>
-                        <div className="text-[9px] text-center font-medium truncate w-full text-slate-400">
-                          {page.fileName}
-                        </div>
+                      <div className="text-center text-sm font-medium text-slate-700 mb-1">
+                        Page {page.pageNumber}
+                      </div>
+                      <div className="text-center text-xs text-slate-400 truncate px-1">
+                        {page.fileName}
                       </div>
                       
-                      <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/5 rounded-lg transition-colors pointer-events-none" />
-                      
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-center mt-2">
                         <Button
-                          variant="destructive"
+                          variant="outline"
                           size="icon"
-                          className="h-6 w-6 rounded-full shadow-sm"
+                          className="h-7 w-7 text-red-500 hover:bg-red-50"
                           onClick={(e) => {
                              e.stopPropagation();
                              setPages(pages.filter(p => p.id !== page.id));
                           }}
+                          title="Remove Page"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </Button>
                       </div>
                    </div>
