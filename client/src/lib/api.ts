@@ -70,7 +70,10 @@ export class APIClient {
   }
 
   async downloadJob(jobId: string, filename?: string): Promise<void> {
-    const response = await fetch(this.getDownloadUrl(jobId));
+    const downloadUrl = `${this.getDownloadUrl(jobId)}?t=${Date.now()}`;
+    const response = await fetch(downloadUrl, {
+      cache: 'no-store',
+    });
     
     if (!response.ok) {
       throw new Error('Failed to download file');
@@ -79,12 +82,16 @@ export class APIClient {
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = url;
-    a.download = filename || `processed_file_${jobId}`;
+    a.download = filename || `processed_file_${jobId}.pdf`;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    }, 100);
   }
 
   async deleteJob(jobId: string): Promise<void> {
