@@ -1,4 +1,13 @@
-export function Footer() {
+import { memo } from "react";
+
+/**
+ * Footer Component - Memoized for Performance
+ * 
+ * React.memo prevents unnecessary re-renders since the footer content
+ * is completely static and doesn't depend on any props or external state.
+ * This optimization ensures the footer DOM is never needlessly reconciled.
+ */
+export const Footer = memo(function Footer() {
   return (
     <footer className="bg-slate-50 border-t py-12 px-4 md:px-8 mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
@@ -41,4 +50,4 @@ export function Footer() {
       </div>
     </footer>
   );
-}
+});

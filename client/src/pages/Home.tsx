@@ -1,12 +1,23 @@
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { ToolCard } from "@/components/ToolCard";
 import { TOOLS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Layers, Zap, FileOutput, FileInput, Edit3, Shield, Image, FilePlus } from "lucide-react";
+import { ArrowRight, Layers, Zap, FileOutput, FileInput, Edit3, Shield, Image, FilePlus, Clock } from "lucide-react";
+import { getRecentTools } from "@/lib/preferences";
 
 export default function Home() {
+  const [recentToolIds, setRecentToolIds] = useState<string[]>([]);
   const favorites = ["merge-pdf", "split-pdf", "compress-pdf", "pdf-to-word", "word-to-pdf", "edit-pdf"];
+
+  useEffect(() => {
+    setRecentToolIds(getRecentTools());
+  }, []);
+
+  const recentToolsData = recentToolIds
+    .map(id => TOOLS.find(t => t.id === id))
+    .filter(Boolean) as typeof TOOLS;
 
   const organizeTools = TOOLS.filter(t => t.category === "organize");
   const optimizeTools = TOOLS.filter(t => t.category === "optimize");
@@ -51,6 +62,25 @@ export default function Home() {
             100% free and easy to use. No signup required!
           </p>
         </div>
+
+        {/* Recently Used Tools - Only shown when user has history */}
+        {recentToolsData.length > 0 && (
+          <div className="max-w-7xl mx-auto mb-16" data-testid="recently-used-section">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 text-white flex items-center justify-center shadow-lg">
+                <Clock size={20} />
+              </div>
+              <h2 className="text-xl font-bold font-display text-slate-900">Recently Used</h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {recentToolsData.map((tool, i) => (
+                <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
+                  <ToolCard {...tool} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Most Popular Tools - Horizontal */}
         <div className="max-w-7xl mx-auto mb-16">

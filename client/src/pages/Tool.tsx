@@ -1,4 +1,5 @@
 import { useRoute } from "wouter";
+import { Suspense, lazy } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { TOOLS } from "@/lib/constants";
@@ -6,6 +7,7 @@ import { FileUploader } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Spinner } from "@/components/ui/spinner";
 import NotFound from "./not-found";
 
 import {
@@ -19,27 +21,52 @@ import {
   FileList,
 } from "@/components/tool-page";
 
-import { MergeEditor } from "@/components/tools/MergeEditor";
-import { SplitEditor } from "@/components/tools/SplitEditor";
-import { CompressOptions } from "@/components/tools/CompressOptions";
-import { PageNumberEditor } from "@/components/tools/PageNumberEditor";
-import { PasswordOptions } from "@/components/tools/PasswordOptions";
-import { WatermarkOptions } from "@/components/tools/WatermarkOptions";
-import { SignatureOptions } from "@/components/tools/SignatureOptions";
-import { VisualCropEditor } from "@/components/tools/VisualCropEditor";
-import { VisualResizeEditor } from "@/components/tools/VisualResizeEditor";
-import { VisualRotateEditor } from "@/components/tools/VisualRotateEditor";
-import { VisualCompressEditor } from "@/components/tools/VisualCompressEditor";
-import { VisualConvertEditor } from "@/components/tools/VisualConvertEditor";
-import { OrganizePdfEditor } from "@/components/tools/OrganizePdfEditor";
-import { ExtractPagesEditor } from "@/components/tools/ExtractPagesEditor";
-import { RotatePagesEditor } from "@/components/tools/RotatePagesEditor";
-import { HtmlToPdfEditor } from "@/components/tools/HtmlToPdfEditor";
-import { EditPdfEditor } from "@/components/tools/EditPdfEditor";
-import { DocumentEditor } from "@/components/tools/DocumentEditor";
-import { WordEditor } from "@/components/tools/WordEditor";
-import { ExcelEditor } from "@/components/tools/ExcelEditor";
-import { PowerPointEditor } from "@/components/tools/PowerPointEditor";
+/**
+ * Lazy-loaded Tool Editor Components
+ * 
+ * These editor components are lazy-loaded to reduce the initial bundle size
+ * of the Tool page. Since users only use one tool at a time, loading all
+ * editors upfront is wasteful. Each editor is loaded on-demand when needed.
+ * 
+ * Benefits:
+ * - Significantly smaller initial chunk for Tool page
+ * - Editors with heavy dependencies (canvas, PDF rendering) load separately
+ * - Better perceived performance for tool switching
+ */
+const MergeEditor = lazy(() => import("@/components/tools/MergeEditor").then(m => ({ default: m.MergeEditor })));
+const SplitEditor = lazy(() => import("@/components/tools/SplitEditor").then(m => ({ default: m.SplitEditor })));
+const CompressOptions = lazy(() => import("@/components/tools/CompressOptions").then(m => ({ default: m.CompressOptions })));
+const PageNumberEditor = lazy(() => import("@/components/tools/PageNumberEditor").then(m => ({ default: m.PageNumberEditor })));
+const PasswordOptions = lazy(() => import("@/components/tools/PasswordOptions").then(m => ({ default: m.PasswordOptions })));
+const WatermarkOptions = lazy(() => import("@/components/tools/WatermarkOptions").then(m => ({ default: m.WatermarkOptions })));
+const SignatureOptions = lazy(() => import("@/components/tools/SignatureOptions").then(m => ({ default: m.SignatureOptions })));
+const VisualCropEditor = lazy(() => import("@/components/tools/VisualCropEditor").then(m => ({ default: m.VisualCropEditor })));
+const VisualResizeEditor = lazy(() => import("@/components/tools/VisualResizeEditor").then(m => ({ default: m.VisualResizeEditor })));
+const VisualRotateEditor = lazy(() => import("@/components/tools/VisualRotateEditor").then(m => ({ default: m.VisualRotateEditor })));
+const VisualCompressEditor = lazy(() => import("@/components/tools/VisualCompressEditor").then(m => ({ default: m.VisualCompressEditor })));
+const VisualConvertEditor = lazy(() => import("@/components/tools/VisualConvertEditor").then(m => ({ default: m.VisualConvertEditor })));
+const OrganizePdfEditor = lazy(() => import("@/components/tools/OrganizePdfEditor").then(m => ({ default: m.OrganizePdfEditor })));
+const ExtractPagesEditor = lazy(() => import("@/components/tools/ExtractPagesEditor").then(m => ({ default: m.ExtractPagesEditor })));
+const RotatePagesEditor = lazy(() => import("@/components/tools/RotatePagesEditor").then(m => ({ default: m.RotatePagesEditor })));
+const HtmlToPdfEditor = lazy(() => import("@/components/tools/HtmlToPdfEditor").then(m => ({ default: m.HtmlToPdfEditor })));
+const EditPdfEditor = lazy(() => import("@/components/tools/EditPdfEditor").then(m => ({ default: m.EditPdfEditor })));
+const DocumentEditor = lazy(() => import("@/components/tools/DocumentEditor").then(m => ({ default: m.DocumentEditor })));
+const WordEditor = lazy(() => import("@/components/tools/WordEditor").then(m => ({ default: m.WordEditor })));
+const ExcelEditor = lazy(() => import("@/components/tools/ExcelEditor").then(m => ({ default: m.ExcelEditor })));
+const PowerPointEditor = lazy(() => import("@/components/tools/PowerPointEditor").then(m => ({ default: m.PowerPointEditor })));
+
+/**
+ * EditorLoader - Loading fallback for lazy-loaded tool editors
+ * Displayed while the editor component is being fetched and loaded
+ */
+function EditorLoader() {
+  return (
+    <div className="w-full flex flex-col items-center justify-center py-12 space-y-4 animate-in fade-in duration-300">
+      <Spinner className="h-8 w-8 text-primary" />
+      <p className="text-muted-foreground text-sm">Loading editor...</p>
+    </div>
+  );
+}
 
 /**
  * ToolPage - Main page component for processing PDF and image files
@@ -363,9 +390,11 @@ export default function ToolPage() {
     if (stage === "upload" && tool.id === "create-document") {
       return (
         <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
-          <DocumentEditor 
-            onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
-          />
+          <Suspense fallback={<EditorLoader />}>
+            <DocumentEditor 
+              onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+            />
+          </Suspense>
           <CreateToolActions
             onProcess={() => handleProcess(tool.id)}
             disabled={!processingOptions.content}
@@ -379,9 +408,11 @@ export default function ToolPage() {
     if (stage === "upload" && tool.id === "create-word") {
       return (
         <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
-          <WordEditor 
-            onContentChange={(content) => setProcessingOptions({ ...processingOptions, wordContent: content })}
-          />
+          <Suspense fallback={<EditorLoader />}>
+            <WordEditor 
+              onContentChange={(content) => setProcessingOptions({ ...processingOptions, wordContent: content })}
+            />
+          </Suspense>
           <CreateToolActions
             onProcess={() => handleProcess(tool.id)}
             disabled={!processingOptions.wordContent}
@@ -395,9 +426,11 @@ export default function ToolPage() {
     if (stage === "upload" && tool.id === "create-excel") {
       return (
         <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
-          <ExcelEditor 
-            onDataChange={(data) => setProcessingOptions({ ...processingOptions, excelData: data })}
-          />
+          <Suspense fallback={<EditorLoader />}>
+            <ExcelEditor 
+              onDataChange={(data) => setProcessingOptions({ ...processingOptions, excelData: data })}
+            />
+          </Suspense>
           <CreateToolActions
             onProcess={() => handleProcess(tool.id)}
             disabled={false}
@@ -411,9 +444,11 @@ export default function ToolPage() {
     if (stage === "upload" && tool.id === "create-powerpoint") {
       return (
         <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
-          <PowerPointEditor 
-            onSlidesChange={(slides) => setProcessingOptions({ ...processingOptions, slides })}
-          />
+          <Suspense fallback={<EditorLoader />}>
+            <PowerPointEditor 
+              onSlidesChange={(slides) => setProcessingOptions({ ...processingOptions, slides })}
+            />
+          </Suspense>
           <CreateToolActions
             onProcess={() => handleProcess(tool.id)}
             disabled={!processingOptions.slides || processingOptions.slides.length === 0}
@@ -427,7 +462,9 @@ export default function ToolPage() {
     if (stage === "files-selected") {
       return (
         <div className="w-full flex flex-col items-center gap-8">
-          {renderContent()}
+          <Suspense fallback={<EditorLoader />}>
+            {renderContent()}
+          </Suspense>
           <FilesSelectedActions
             showAddMore={!tool.maxFiles}
             onAddMore={() => setStage("upload")}
