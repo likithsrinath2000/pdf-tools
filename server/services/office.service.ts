@@ -200,20 +200,97 @@ export class OfficeService {
   }
 
   async htmlToPDF(htmlContent: string, outputPath: string): Promise<void> {
-    const htmlPath = outputPath.replace('.pdf', '.html');
-    await fs.writeFile(htmlPath, htmlContent);
+    const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
     
-    try {
-      await execPromise(
-        `wkhtmltopdf "${htmlPath}" "${outputPath}"`
-      );
-      await fs.unlink(htmlPath);
-    } catch (error) {
-      try {
-        await fs.unlink(htmlPath);
-      } catch {}
-      throw new Error(`Failed to convert HTML to PDF: ${error}`);
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    
+    const plainText = this.extractTextFromHtml(htmlContent);
+    const lines = this.wrapText(plainText, font, 12, 500);
+    
+    const linesPerPage = 50;
+    const pageHeight = 792;
+    const pageWidth = 612;
+    const margin = 50;
+    const lineHeight = 14;
+    
+    for (let i = 0; i < lines.length; i += linesPerPage) {
+      const page = doc.addPage([pageWidth, pageHeight]);
+      const pageLines = lines.slice(i, i + linesPerPage);
+      
+      let y = pageHeight - margin;
+      for (const line of pageLines) {
+        page.drawText(line, {
+          x: margin,
+          y,
+          size: 12,
+          font,
+          color: rgb(0, 0, 0),
+        });
+        y -= lineHeight;
+      }
     }
+    
+    if (doc.getPageCount() === 0) {
+      doc.addPage([pageWidth, pageHeight]);
+    }
+    
+    const pdfBytes = await doc.save();
+    await fs.writeFile(outputPath, pdfBytes);
+  }
+
+  private extractTextFromHtml(html: string): string {
+    let text = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<\/h[1-6]>/gi, '\n\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return text;
+  }
+
+  private wrapText(text: string, font: any, fontSize: number, maxWidth: number): string[] {
+    const lines: string[] = [];
+    const paragraphs = text.split('\n');
+    
+    for (const paragraph of paragraphs) {
+      if (!paragraph.trim()) {
+        lines.push('');
+        continue;
+      }
+      
+      const words = paragraph.split(' ');
+      let currentLine = '';
+      
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const width = font.widthOfTextAtSize(testLine, fontSize);
+        
+        if (width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    }
+    
+    return lines;
   }
 }
 

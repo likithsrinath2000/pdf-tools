@@ -339,6 +339,7 @@ export default function ToolPage() {
     if (tool.id === "html-to-pdf") {
       return (
         <HtmlToPdfEditor 
+          files={files}
           onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
         />
       );

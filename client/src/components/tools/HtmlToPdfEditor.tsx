@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from "react";
-import { Label } from "@/components/ui/label";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Code, Eye, FileText } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Code, Eye, FileText, Upload } from "lucide-react";
 
 interface HtmlToPdfEditorProps {
+  files?: File[];
   onOptionsChange: (options: { htmlContent: string }) => void;
 }
 
@@ -27,14 +26,42 @@ const defaultHtml = `<!DOCTYPE html>
 </body>
 </html>`;
 
-export function HtmlToPdfEditor({ onOptionsChange }: HtmlToPdfEditorProps) {
-  const [htmlContent, setHtmlContent] = useState(defaultHtml);
+export function HtmlToPdfEditor({ files, onOptionsChange }: HtmlToPdfEditorProps) {
+  const [htmlContent, setHtmlContent] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [fileLoaded, setFileLoaded] = useState(false);
   const onOptionsChangeRef = useRef(onOptionsChange);
+  const initialLoadRef = useRef(false);
+  
   onOptionsChangeRef.current = onOptionsChange;
 
+  const loadFileContent = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      setHtmlContent(text);
+      setFileLoaded(true);
+    } catch (error) {
+      console.error("Error reading HTML file:", error);
+      setHtmlContent(defaultHtml);
+    }
+  }, []);
+
   useEffect(() => {
-    onOptionsChangeRef.current({ htmlContent });
+    if (files && files.length > 0 && !initialLoadRef.current) {
+      loadFileContent(files[0]);
+      initialLoadRef.current = true;
+    } else if (!files || files.length === 0) {
+      if (!initialLoadRef.current) {
+        setHtmlContent(defaultHtml);
+        initialLoadRef.current = true;
+      }
+    }
+  }, [files, loadFileContent]);
+
+  useEffect(() => {
+    if (htmlContent) {
+      onOptionsChangeRef.current({ htmlContent });
+    }
   }, [htmlContent]);
 
   return (
@@ -45,7 +72,7 @@ export function HtmlToPdfEditor({ onOptionsChange }: HtmlToPdfEditorProps) {
           <div>
             <h3 className="font-semibold text-slate-900">HTML to PDF Converter</h3>
             <p className="text-sm text-muted-foreground">
-              Write or paste HTML code to convert it to a PDF document
+              {fileLoaded ? "Editing uploaded HTML file" : "Write or paste HTML code"}
             </p>
           </div>
         </div>
@@ -110,7 +137,7 @@ export function HtmlToPdfEditor({ onOptionsChange }: HtmlToPdfEditorProps) {
       </div>
 
       <p className="text-center text-sm text-muted-foreground">
-        💻 Write HTML with inline styles for best results. External CSS links won't work.
+        Write HTML with inline styles for best results. External CSS links won't work in the PDF.
       </p>
     </div>
   );
