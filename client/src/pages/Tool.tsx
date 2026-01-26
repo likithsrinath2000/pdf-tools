@@ -14,6 +14,7 @@ import NotFound from "./not-found";
 import { MergeEditor } from "@/components/tools/MergeEditor";
 import { SplitEditor } from "@/components/tools/SplitEditor";
 import { CompressOptions } from "@/components/tools/CompressOptions";
+import { PageNumberEditor } from "@/components/tools/PageNumberEditor";
 
 type Stage = "upload" | "files-selected" | "processing" | "download";
 
@@ -100,6 +101,10 @@ export default function ToolPage() {
        );
     }
 
+    if (tool.id === "add-page-numbers") {
+       return <PageNumberEditor files={files} />;
+    }
+
     // Default file list for other tools
     return (
        <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -127,7 +132,7 @@ export default function ToolPage() {
         {/* Main Content Area */}
         <div className={cn(
            "w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 md:p-12 min-h-[400px] flex flex-col items-center justify-center transition-all duration-500",
-           stage === "files-selected" ? "max-w-6xl" : "max-w-4xl" 
+           stage === "files-selected" ? "max-w-7xl" : "max-w-4xl" 
         )}>
           
           {stage === "upload" && (
