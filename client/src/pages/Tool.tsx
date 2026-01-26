@@ -6,9 +6,14 @@ import { TOOLS } from "@/lib/constants";
 import { FileUploader } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NotFound from "./not-found";
+
+// Import custom editors
+import { MergeEditor } from "@/components/tools/MergeEditor";
+import { SplitEditor } from "@/components/tools/SplitEditor";
+import { CompressOptions } from "@/components/tools/CompressOptions";
 
 type Stage = "upload" | "files-selected" | "processing" | "download";
 
@@ -45,6 +50,10 @@ export default function ToolPage() {
     }
   };
 
+  const handleReorder = (reorderedFiles: File[]) => {
+     setFiles(reorderedFiles);
+  };
+
   const handleProcess = () => {
     setStage("processing");
     // Simulate processing
@@ -72,6 +81,33 @@ export default function ToolPage() {
     document.body.removeChild(a);
   };
 
+  // Determine if we show the default list or a custom editor
+  const renderContent = () => {
+    if (tool.id === "merge-pdf") {
+      return <MergeEditor files={files} onReorder={handleReorder} onRemove={removeFile} />;
+    }
+    
+    if (tool.id === "split-pdf") {
+      return <SplitEditor files={files} />;
+    }
+
+    if (tool.id === "compress-pdf" || tool.id === "compress-image") {
+       return (
+         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+           <FileList files={files} onRemove={removeFile} />
+           <CompressOptions />
+         </div>
+       );
+    }
+
+    // Default file list for other tools
+    return (
+       <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+         <FileList files={files} onRemove={removeFile} />
+       </div>
+    );
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50/50">
       <Navbar />
@@ -89,7 +125,10 @@ export default function ToolPage() {
         </div>
 
         {/* Main Content Area */}
-        <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl border border-slate-100 p-8 md:p-12 min-h-[400px] flex flex-col items-center justify-center transition-all duration-500">
+        <div className={cn(
+           "w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 md:p-12 min-h-[400px] flex flex-col items-center justify-center transition-all duration-500",
+           stage === "files-selected" ? "max-w-6xl" : "max-w-4xl" 
+        )}>
           
           {stage === "upload" && (
             <div className="w-full animate-in fade-in zoom-in-95 duration-300">
@@ -101,27 +140,10 @@ export default function ToolPage() {
           )}
 
           {stage === "files-selected" && (
-            <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-              <div className="grid gap-4 max-h-[400px] overflow-y-auto p-2">
-                {files.map((file, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border group hover:border-primary/30 transition-colors">
-                    <div className="flex items-center gap-4 overflow-hidden">
-                      <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
-                        <FileIcon size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">{file.name}</p>
-                        <p className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 size={18} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+            <div className="w-full flex flex-col items-center gap-8">
+               {renderContent()}
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
                 <Button 
                   variant="outline" 
                   size="lg" 
@@ -150,7 +172,7 @@ export default function ToolPage() {
                  </div>
               </div>
               <div>
-                <h3 className="text-2xl font-bold mb-2">Processing your PDF...</h3>
+                <h3 className="text-2xl font-bold mb-2">Processing...</h3>
                 <p className="text-muted-foreground">Hold tight, this won't take long.</p>
               </div>
               <Progress value={progress} className="h-3" />
@@ -164,7 +186,7 @@ export default function ToolPage() {
               </div>
               <div>
                 <h3 className="text-2xl font-bold mb-2">Task Completed!</h3>
-                <p className="text-muted-foreground mb-8">Your documents have been processed successfully.</p>
+                <p className="text-muted-foreground mb-8">Your files have been processed successfully.</p>
                 
                 <div className="space-y-4">
                   <Button 
@@ -188,6 +210,33 @@ export default function ToolPage() {
       </main>
 
       <Footer />
+    </div>
+  );
+}
+
+function FileList({ files, onRemove }: { files: File[], onRemove: (i: number) => void }) {
+  return (
+    <div className="grid gap-4 w-full max-w-2xl max-h-[400px] overflow-y-auto p-2">
+      {files.map((file, i) => (
+        <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border group hover:border-primary/30 transition-colors">
+          <div className="flex items-center gap-4 overflow-hidden">
+            <div className="w-12 h-12 rounded-lg bg-white border flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+               {file.type.includes('image') ? (
+                  <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
+               ) : (
+                  <FileIcon size={24} className="text-red-500" />
+               )}
+            </div>
+            <div className="min-w-0">
+              <p className="font-medium truncate text-slate-700">{file.name}</p>
+              <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => onRemove(i)} className="text-slate-400 hover:text-destructive">
+            <Trash2 size={18} />
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
