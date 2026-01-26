@@ -6,9 +6,11 @@ import { TOOLS } from "@/lib/constants";
 import { FileUploader } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon } from "lucide-react";
+import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NotFound from "./not-found";
+import { apiClient } from "@/lib/api";
+import type { ProcessingJob } from "@shared/schema";
 
 // Import custom editors
 import { MergeEditor } from "@/components/tools/MergeEditor";
@@ -16,7 +18,7 @@ import { SplitEditor } from "@/components/tools/SplitEditor";
 import { CompressOptions } from "@/components/tools/CompressOptions";
 import { PageNumberEditor } from "@/components/tools/PageNumberEditor";
 
-type Stage = "upload" | "files-selected" | "processing" | "download";
+type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
 
 export default function ToolPage() {
   const [match, params] = useRoute("/:id");
@@ -26,12 +28,18 @@ export default function ToolPage() {
   const [stage, setStage] = useState<Stage>("upload");
   const [files, setFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState(0);
+  const [currentJob, setCurrentJob] = useState<ProcessingJob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [processingOptions, setProcessingOptions] = useState<any>({});
 
   // Reset state when tool changes
   useEffect(() => {
     setStage("upload");
     setFiles([]);
     setProgress(0);
+    setCurrentJob(null);
+    setError(null);
+    setProcessingOptions({});
   }, [toolId]);
 
   if (!tool) {
@@ -55,31 +63,48 @@ export default function ToolPage() {
      setFiles(reorderedFiles);
   };
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
+    if (!toolId) return;
+    
     setStage("processing");
-    // Simulate processing
-    let p = 0;
-    const interval = setInterval(() => {
-      p += Math.random() * 15;
-      if (p >= 100) {
-        p = 100;
-        clearInterval(interval);
-        setTimeout(() => setStage("download"), 500);
-      }
-      setProgress(p);
-    }, 500);
+    setProgress(0);
+    setError(null);
+
+    try {
+      const { jobId } = await apiClient.createJob(toolId, files, processingOptions);
+      
+      await apiClient.pollJobStatus(jobId, (job) => {
+        setCurrentJob(job);
+        setProgress(job.progress || 0);
+      });
+
+      const finalJob = await apiClient.getJob(jobId);
+      setCurrentJob(finalJob);
+      setStage("download");
+    } catch (err: any) {
+      setError(err.message || "An error occurred during processing");
+      setStage("error");
+    }
   };
 
-  const handleDownload = () => {
-    // Fake download logic
-    const blob = new Blob(["Fake PDF Content"], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `processed_document.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownload = async () => {
+    if (!currentJob) return;
+    
+    try {
+      const filename = `${tool?.id}_${Date.now()}.${currentJob.outputFile?.split('.').pop()}`;
+      await apiClient.downloadJob(currentJob.id, filename);
+    } catch (err: any) {
+      setError(err.message || "Failed to download file");
+    }
+  };
+
+  const handleReset = () => {
+    setStage("upload");
+    setFiles([]);
+    setProgress(0);
+    setCurrentJob(null);
+    setError(null);
+    setProcessingOptions({});
   };
 
   // Determine if we show the default list or a custom editor
@@ -198,15 +223,39 @@ export default function ToolPage() {
                     size="lg" 
                     onClick={handleDownload}
                     className="w-full h-14 text-lg rounded-xl shadow-xl shadow-primary/20 hover:scale-[1.02] transition-transform bg-slate-900 hover:bg-slate-800"
+                    data-testid="button-download"
                   >
                     <Download className="mr-2 h-5 w-5" /> Download File
                   </Button>
                   
                   <div className="flex gap-2 justify-center">
-                    <Button variant="ghost" onClick={() => window.location.reload()}>
+                    <Button variant="ghost" onClick={handleReset} data-testid="button-reset">
                        Start Over
                     </Button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {stage === "error" && (
+            <div className="w-full max-w-md text-center space-y-8 animate-in fade-in zoom-in-95 duration-500">
+              <div className="w-24 h-24 mx-auto bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-6">
+                <AlertCircle size={48} strokeWidth={2} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold mb-2">Oops! Something went wrong</h3>
+                <p className="text-muted-foreground mb-4">{error}</p>
+                
+                <div className="space-y-4">
+                  <Button 
+                    size="lg" 
+                    onClick={handleReset}
+                    className="w-full h-14 text-lg rounded-xl"
+                    data-testid="button-try-again"
+                  >
+                    Try Again
+                  </Button>
                 </div>
               </div>
             </div>
