@@ -138,6 +138,21 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
                     
                     {/* Hover Overlay */}
                     <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/5 rounded-lg transition-colors pointer-events-none" />
+                    
+                    {/* Delete Button */}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100">
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="h-6 w-6 rounded-full shadow-sm"
+                        onClick={(e) => {
+                           e.stopPropagation(); // Prevent drag start
+                           setPages(pages.filter(p => p.id !== page.id));
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
                  </div>
               </Reorder.Item>
             ))}

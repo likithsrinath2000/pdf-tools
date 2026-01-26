@@ -84,7 +84,7 @@ export default function ToolPage() {
 
   // Determine if we show the default list or a custom editor
   const renderContent = () => {
-    if (tool.id === "merge-pdf") {
+    if (tool.id === "merge-pdf" || tool.id === "organize-pdf" || tool.id === "remove-pages") {
       return <MergeEditor files={files} onReorder={handleReorder} onRemove={removeFile} />;
     }
     
