@@ -239,10 +239,21 @@ export class PDFService {
     
     let previewImage: string | undefined;
     try {
-      const { stdout } = await execPromise(
-        `pdftoppm -png -f 1 -l 1 -scale-to 400 "${inputPath}" -`
+      const tempPrefix = path.join(path.dirname(inputPath), `preview_${Date.now()}`);
+      await execPromise(
+        `pdftoppm -png -f 1 -l 1 -scale-to 400 "${inputPath}" "${tempPrefix}"`
       );
-      previewImage = `data:image/png;base64,${Buffer.from(stdout, 'binary').toString('base64')}`;
+      
+      const tempDir = path.dirname(inputPath);
+      const files = await fs.readdir(tempDir);
+      const previewFile = files.find(f => f.startsWith(`preview_`) && f.endsWith('.png'));
+      
+      if (previewFile) {
+        const previewPath = path.join(tempDir, previewFile);
+        const imageBuffer = await fs.readFile(previewPath);
+        previewImage = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+        await fs.unlink(previewPath).catch(() => {});
+      }
     } catch (err) {
       previewImage = undefined;
     }
