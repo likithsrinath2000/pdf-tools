@@ -1,4 +1,4 @@
-import { processingJobs, type ProcessingJob, type InsertProcessingJob } from "@shared/schema";
+import { processingJobs, feedbacks, type ProcessingJob, type InsertProcessingJob, type Feedback, type InsertFeedback } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
@@ -10,6 +10,8 @@ export interface IStorage {
   updateJobError(id: string, error: string): Promise<void>;
   getRecentJobs(limit?: number): Promise<ProcessingJob[]>;
   deleteJob(id: string): Promise<void>;
+  createFeedback(feedback: InsertFeedback): Promise<Feedback>;
+  getAllFeedback(): Promise<Feedback[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -69,6 +71,21 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(processingJobs)
       .where(eq(processingJobs.id, id));
+  }
+
+  async createFeedback(insertFeedback: InsertFeedback): Promise<Feedback> {
+    const [feedback] = await db
+      .insert(feedbacks)
+      .values(insertFeedback)
+      .returning();
+    return feedback;
+  }
+
+  async getAllFeedback(): Promise<Feedback[]> {
+    return await db
+      .select()
+      .from(feedbacks)
+      .orderBy(desc(feedbacks.createdAt));
   }
 }
 

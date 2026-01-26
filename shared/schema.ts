@@ -24,3 +24,20 @@ export const insertProcessingJobSchema = createInsertSchema(processingJobs).omit
 
 export type InsertProcessingJob = z.infer<typeof insertProcessingJobSchema>;
 export type ProcessingJob = typeof processingJobs.$inferSelect;
+
+export const feedbacks = pgTable("feedbacks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  feedback: text("feedback").notNull(),
+  email: text("email"),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFeedbackSchema = createInsertSchema(feedbacks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
+export type Feedback = typeof feedbacks.$inferSelect;

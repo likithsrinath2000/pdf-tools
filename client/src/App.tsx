@@ -25,6 +25,7 @@ const About = lazy(() => import("@/pages/About"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const Feedback = lazy(() => import("@/pages/Feedback"));
+const AdminFeedback = lazy(() => import("@/pages/AdminFeedback"));
 
 /**
  * PageLoader - Loading fallback component for lazy-loaded pages
@@ -50,6 +51,7 @@ function Router() {
         <Route path="/privacy" component={Privacy} />
         <Route path="/terms" component={Terms} />
         <Route path="/feedback" component={Feedback} />
+        <Route path="/admin/feedback" component={AdminFeedback} />
         <Route path="/:id" component={ToolPage} />
         <Route component={NotFound} />
       </Switch>
