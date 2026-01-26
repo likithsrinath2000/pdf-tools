@@ -68,7 +68,7 @@ export function Navbar() {
                 PDF Tools
               </NavigationMenuTrigger>
               <NavigationMenuContent>
-                <div className="w-[600px] lg:w-[800px] p-6 bg-white rounded-xl shadow-xl grid grid-cols-3 lg:grid-cols-4 gap-6">
+                <div className="w-[700px] lg:w-[900px] p-6 bg-white rounded-xl shadow-xl grid grid-cols-3 lg:grid-cols-5 gap-6">
                   <div className="space-y-4">
                     <h4 className="font-bold text-sm text-red-600 uppercase tracking-wider">Organize PDF</h4>
                     <ul className="space-y-2">
@@ -97,6 +97,33 @@ export function Navbar() {
                         </li>
                       ))}
                     </ul>
+                    <h4 className="font-bold text-sm text-slate-600 uppercase tracking-wider mt-4">Security</h4>
+                    <ul className="space-y-2">
+                      {securityTools.map(tool => (
+                        <li key={tool.id}>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-sm text-purple-600 uppercase tracking-wider">Edit PDF</h4>
+                    <ul className="space-y-2">
+                      {editTools.map(tool => (
+                        <li key={tool.id}>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
 
                   <div className="space-y-4">
@@ -112,25 +139,12 @@ export function Navbar() {
                         </li>
                       ))}
                     </ul>
-                    {/* Security moved here for better spacing on smaller screens if needed */}
                   </div>
 
                   <div className="space-y-4">
-                     <h4 className="font-bold text-sm text-purple-600 uppercase tracking-wider">Convert from PDF</h4>
+                     <h4 className="font-bold text-sm text-orange-600 uppercase tracking-wider">Convert from PDF</h4>
                     <ul className="space-y-2">
                       {convertFromPdfTools.map(tool => (
-                        <li key={tool.id}>
-                          <NavigationMenuLink asChild>
-                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                               {tool.title}
-                            </Link>
-                          </NavigationMenuLink>
-                        </li>
-                      ))}
-                    </ul>
-                    <h4 className="font-bold text-sm text-slate-600 uppercase tracking-wider mt-6">Security</h4>
-                    <ul className="space-y-2">
-                      {securityTools.map(tool => (
                         <li key={tool.id}>
                           <NavigationMenuLink asChild>
                             <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
@@ -302,6 +316,26 @@ export function Navbar() {
                   <AccordionContent className="px-3 pb-2 pt-1">
                     <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
                       {convertFromPdfTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="edit">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-purple-500" />
+                      Edit PDF
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {editTools.map(tool => (
                         <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
                           <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
                             {tool.title}
