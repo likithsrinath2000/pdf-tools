@@ -43,7 +43,9 @@ export function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b z-50 px-4 md:px-8 flex items-center justify-between shadow-sm">
-      <Link href="/">
+      <Link href="/" onClick={() => {
+        // Force close logic if needed, usually Link change handles it but state reset is good
+      }}>
         <div className="flex items-center gap-3 cursor-pointer group">
           <img 
             src="/src/assets/logo-humorous.png" 
@@ -71,9 +73,11 @@ export function Navbar() {
                     <ul className="space-y-2">
                       {organizeTools.map(tool => (
                         <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
                         </li>
                       ))}
                     </ul>
@@ -84,9 +88,11 @@ export function Navbar() {
                     <ul className="space-y-2">
                       {optimizeTools.map(tool => (
                         <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
                         </li>
                       ))}
                     </ul>
@@ -97,9 +103,11 @@ export function Navbar() {
                     <ul className="space-y-2">
                       {convertToPdfTools.map(tool => (
                         <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
                         </li>
                       ))}
                     </ul>
@@ -111,9 +119,11 @@ export function Navbar() {
                     <ul className="space-y-2">
                       {convertFromPdfTools.map(tool => (
                         <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
                         </li>
                       ))}
                     </ul>
@@ -121,9 +131,11 @@ export function Navbar() {
                     <ul className="space-y-2">
                       {securityTools.map(tool => (
                         <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
                         </li>
                       ))}
                     </ul>
@@ -142,9 +154,11 @@ export function Navbar() {
                     <ul className="space-y-2">
                       {imageTools.map(tool => (
                         <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
+                          <NavigationMenuLink asChild>
+                            <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                               {tool.title}
+                            </Link>
+                          </NavigationMenuLink>
                         </li>
                       ))}
                     </ul>
