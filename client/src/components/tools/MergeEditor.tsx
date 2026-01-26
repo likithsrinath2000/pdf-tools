@@ -230,19 +230,20 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
             </div>
           ) : (
             <Reorder.Group 
-                axis="y" 
+                axis="x" 
                 values={pages} 
                 onReorder={setPages} 
-                className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4"
-                as="ul"
+                className="flex flex-wrap gap-4 justify-center"
             >
               {pages.map((page) => (
                 <Reorder.Item 
                     key={page.id} 
                     value={page}
-                    className="relative group cursor-grab active:cursor-grabbing"
+                    className="relative group cursor-grab active:cursor-grabbing w-[120px]"
+                    drag
+                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
                 >
-                   <div className="bg-white border-2 border-slate-100 rounded-lg p-2 hover:border-primary hover:shadow-lg transition-all flex flex-col items-center gap-2 group-active:scale-105">
+                   <div className="bg-white border-2 border-slate-100 rounded-lg p-2 hover:border-primary hover:shadow-lg transition-all flex flex-col items-center gap-2 group-active:scale-105 select-none">
                       
                       <div className="w-full aspect-[3/4] bg-slate-50 rounded border overflow-hidden flex items-center justify-center">
                         {page.thumbnail ? (
