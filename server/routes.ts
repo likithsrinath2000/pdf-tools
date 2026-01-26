@@ -386,6 +386,10 @@ async function processJobAsync(
         await pdfService.convertToPDFA(inputFiles[0].path, outputPath);
         break;
 
+      case "pdf-to-text":
+        await pdfService.pdfToText(inputFiles[0].path, outputPath);
+        break;
+
       default:
         throw new Error(`Unknown tool: ${toolId}`);
     }
@@ -461,6 +465,7 @@ function getOutputExtension(toolId: string): string {
     "sign-pdf": ".pdf",
     "repair-pdf": ".pdf",
     "pdf-to-pdfa": ".pdf",
+    "pdf-to-text": ".txt",
     "convert-image": ".jpg",
   };
   return extensionMap[toolId] || ".pdf";

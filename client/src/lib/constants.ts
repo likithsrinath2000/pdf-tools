@@ -207,6 +207,16 @@ export const TOOLS: Tool[] = [
     action: "Convert to PDF/A",
     category: "convert-from-pdf"
   },
+  {
+    id: "pdf-to-text",
+    title: "PDF to Text",
+    description: "Extract all text from your PDF documents into a plain text file. No more copy-paste gymnastics!",
+    icon: FileText,
+    color: "bg-gray-600",
+    accept: ".pdf",
+    action: "Extract Text",
+    category: "convert-from-pdf"
+  },
 
   // Edit PDF
   {

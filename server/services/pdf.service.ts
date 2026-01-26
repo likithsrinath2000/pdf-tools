@@ -686,6 +686,21 @@ export class PDFService {
       await fs.writeFile(outputPath, newPdfBytes);
     }
   }
+
+  async pdfToText(inputPath: string, outputPath: string): Promise<void> {
+    try {
+      // Use pdftotext from poppler-utils for accurate text extraction
+      await execPromise(`pdftotext -layout "${inputPath}" "${outputPath}"`);
+    } catch (error) {
+      // Fallback: try without layout option
+      try {
+        await execPromise(`pdftotext "${inputPath}" "${outputPath}"`);
+      } catch (fallbackError) {
+        // Last resort: create empty text file with error message
+        await fs.writeFile(outputPath, `Unable to extract text from PDF. The file may be scanned or image-based.\n\nTip: For scanned PDFs, try our OCR tool instead! (Coming soon)`);
+      }
+    }
+  }
 }
 
 export const pdfService = new PDFService();
