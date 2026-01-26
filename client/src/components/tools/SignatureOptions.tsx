@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -11,6 +11,8 @@ interface SignatureOptionsProps {
 export function SignatureOptions({ onChange }: SignatureOptionsProps) {
   const [signatureText, setSignatureText] = useState("");
   const [positionPreset, setPositionPreset] = useState("bottom-right");
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const positions: Record<string, { x: number; y: number }> = {
     "bottom-left": { x: 50, y: 50 },
@@ -19,11 +21,11 @@ export function SignatureOptions({ onChange }: SignatureOptionsProps) {
   };
 
   useEffect(() => {
-    onChange({
+    onChangeRef.current({
       signatureText: signatureText || "Signature",
       position: { page: 1, ...positions[positionPreset] }
     });
-  }, [signatureText, positionPreset, onChange]);
+  }, [signatureText, positionPreset]);
 
   return (
     <div className="w-full max-w-lg mx-auto space-y-6 p-6 bg-slate-50 rounded-2xl border">

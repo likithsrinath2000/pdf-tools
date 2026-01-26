@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -11,10 +11,12 @@ interface WatermarkOptionsProps {
 export function WatermarkOptions({ onChange }: WatermarkOptionsProps) {
   const [watermarkText, setWatermarkText] = useState("CONFIDENTIAL");
   const [opacity, setOpacity] = useState(30);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    onChange({ watermarkText, opacity: opacity / 100 });
-  }, [watermarkText, opacity, onChange]);
+    onChangeRef.current({ watermarkText, opacity: opacity / 100 });
+  }, [watermarkText, opacity]);
 
   return (
     <div className="w-full max-w-md mx-auto space-y-6 p-6 bg-slate-50 rounded-2xl border">

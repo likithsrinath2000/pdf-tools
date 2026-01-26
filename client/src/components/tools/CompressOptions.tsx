@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CheckCircle2 } from "lucide-react";
@@ -9,10 +9,12 @@ interface CompressOptionsProps {
 
 export function CompressOptions({ onChange }: CompressOptionsProps) {
   const [quality, setQuality] = useState("medium");
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    onChange(quality);
-  }, [quality, onChange]);
+    onChangeRef.current(quality);
+  }, [quality]);
 
   return (
     <div className="w-full max-w-3xl">

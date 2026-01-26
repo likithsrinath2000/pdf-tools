@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Layers } from "lucide-react";
@@ -10,14 +10,16 @@ interface ExtractPagesOptionsProps {
 export function ExtractPagesOptions({ onChange }: ExtractPagesOptionsProps) {
   const [pagesInput, setPagesInput] = useState("");
   const [error, setError] = useState("");
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     const pages = parsePageNumbers(pagesInput);
     if (pages.length > 0 || pagesInput === "") {
       setError("");
-      onChange(pages);
+      onChangeRef.current(pages);
     }
-  }, [pagesInput, onChange]);
+  }, [pagesInput]);
 
   const parsePageNumbers = (input: string): number[] => {
     if (!input.trim()) return [];

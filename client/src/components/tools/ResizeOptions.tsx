@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -12,14 +12,16 @@ export function ResizeOptions({ onChange }: ResizeOptionsProps) {
   const [width, setWidth] = useState<string>("800");
   const [height, setHeight] = useState<string>("600");
   const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    onChange({
+    onChangeRef.current({
       width: width ? parseInt(width) : undefined,
       height: height ? parseInt(height) : undefined,
       maintainAspectRatio
     });
-  }, [width, height, maintainAspectRatio, onChange]);
+  }, [width, height, maintainAspectRatio]);
 
   return (
     <div className="w-full max-w-md mx-auto space-y-6 p-6 bg-slate-50 rounded-2xl border">

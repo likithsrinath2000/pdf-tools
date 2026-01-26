@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { RotateCw, RotateCcw } from "lucide-react";
@@ -9,10 +9,12 @@ interface RotateOptionsProps {
 
 export function RotateOptions({ onChange }: RotateOptionsProps) {
   const [angle, setAngle] = useState(90);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    onChange(angle);
-  }, [angle, onChange]);
+    onChangeRef.current(angle);
+  }, [angle]);
 
   const options = [
     { value: 90, label: "90° Right", icon: RotateCw, description: "Quarter turn clockwise" },

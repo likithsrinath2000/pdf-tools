@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Crop } from "lucide-react";
@@ -12,15 +12,17 @@ export function CropOptions({ onChange }: CropOptionsProps) {
   const [top, setTop] = useState<string>("0");
   const [width, setWidth] = useState<string>("500");
   const [height, setHeight] = useState<string>("500");
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    onChange({
+    onChangeRef.current({
       left: parseInt(left) || 0,
       top: parseInt(top) || 0,
       width: parseInt(width) || 100,
       height: parseInt(height) || 100
     });
-  }, [left, top, width, height, onChange]);
+  }, [left, top, width, height]);
 
   return (
     <div className="w-full max-w-md mx-auto space-y-6 p-6 bg-slate-50 rounded-2xl border">

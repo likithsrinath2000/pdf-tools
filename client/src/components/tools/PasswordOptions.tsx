@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Eye, EyeOff } from "lucide-react";
@@ -14,22 +14,24 @@ export function PasswordOptions({ mode, onChange }: PasswordOptionsProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (mode === "protect") {
       if (password && password === confirmPassword) {
-        onChange(password);
+        onChangeRef.current(password);
         setError("");
       } else if (password && confirmPassword && password !== confirmPassword) {
         setError("Passwords don't match. Try again, champ!");
-        onChange("");
+        onChangeRef.current("");
       } else {
-        onChange("");
+        onChangeRef.current("");
       }
     } else {
-      onChange(password);
+      onChangeRef.current(password);
     }
-  }, [password, confirmPassword, mode, onChange]);
+  }, [password, confirmPassword, mode]);
 
   return (
     <div className="w-full max-w-md mx-auto space-y-6 p-6 bg-slate-50 rounded-2xl border">
