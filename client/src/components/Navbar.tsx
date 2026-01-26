@@ -84,8 +84,8 @@ export function Navbar() {
               <NavigationMenuTrigger className="bg-transparent hover:bg-slate-100 font-semibold">
                 All Tools
               </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <div className="w-[800px] p-6 bg-white rounded-xl shadow-xl grid grid-cols-4 gap-6">
+              <NavigationMenuContent className="right-0 w-[800px] md:w-[600px] lg:w-[800px]">
+                <div className="w-full p-6 bg-white rounded-xl shadow-xl grid grid-cols-4 gap-6">
                   <div className="space-y-4">
                     <h4 className="font-bold text-sm text-red-600 uppercase tracking-wider">Organize PDF</h4>
                     <ul className="space-y-2">

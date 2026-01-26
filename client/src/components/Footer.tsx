@@ -13,29 +13,10 @@ export function Footer() {
         </div>
         
         <div>
-          <h4 className="font-bold mb-4">Solutions</h4>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li><a href="#" className="hover:text-primary">Business</a></li>
-            <li><a href="#" className="hover:text-primary">Education</a></li>
-            <li><a href="#" className="hover:text-primary">Developers</a></li>
-          </ul>
-        </div>
-        
-        <div>
           <h4 className="font-bold mb-4">Company</h4>
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li><a href="#" className="hover:text-primary">About</a></li>
-            <li><a href="#" className="hover:text-primary">Legal</a></li>
-            <li><a href="#" className="hover:text-primary">Help</a></li>
-          </ul>
-        </div>
-        
-        <div>
-          <h4 className="font-bold mb-4">Product</h4>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li><a href="#" className="hover:text-primary">Pricing</a></li>
-            <li><a href="#" className="hover:text-primary">Teams</a></li>
-            <li><a href="#" className="hover:text-primary">Security</a></li>
+            <li><a href="#" className="hover:text-primary">About Us</a></li>
+            <li><a href="#" className="hover:text-primary">Feedback</a></li>
           </ul>
         </div>
       </div>

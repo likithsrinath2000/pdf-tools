@@ -35,6 +35,9 @@ export function FileUploader({ onFilesSelected, accept, className }: FileUploade
     accept: acceptMap
   });
 
+  const isImage = Object.keys(acceptMap).some(k => k.startsWith('image/'));
+  const typeLabel = isImage ? "Images" : "PDF files";
+
   return (
     <div 
       {...getRootProps()} 
@@ -54,7 +57,7 @@ export function FileUploader({ onFilesSelected, accept, className }: FileUploade
         </div>
         <div className="space-y-2">
           <h3 className="text-2xl font-bold text-foreground">
-            {isDragActive ? "Drop files here" : "Select PDF files"}
+            {isDragActive ? "Drop files here" : `Select ${typeLabel}`}
           </h3>
           <p className="text-muted-foreground text-lg">
             or drop files here
