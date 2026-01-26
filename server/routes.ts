@@ -318,7 +318,12 @@ async function processJobAsync(
         break;
 
       case "sign-pdf":
-        await pdfService.signPDF(inputFiles[0].path, outputPath, options.signatureText || 'Signature', options.position || { page: 1, x: 100, y: 100 });
+        await pdfService.signPDF(inputFiles[0].path, outputPath, {
+          signatureText: options.signatureText,
+          signatureImage: options.signatureImage,
+          signatureType: options.signatureType || 'text',
+          position: options.position || { page: 1, x: 100, y: 100 }
+        });
         break;
 
       case "repair-pdf":

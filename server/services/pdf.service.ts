@@ -394,33 +394,56 @@ export class PDFService {
   async signPDF(
     inputPath: string, 
     outputPath: string, 
-    signatureText: string,
-    position: { page: number; x: number; y: number }
+    options: {
+      signatureText?: string;
+      signatureImage?: string;
+      signatureType: 'text' | 'drawn';
+      position: { page: number; x: number; y: number };
+    }
   ): Promise<void> {
     const pdfBytes = await fs.readFile(inputPath);
     const pdf = await PDFDocument.load(pdfBytes);
-    const font = await pdf.embedFont(StandardFonts.TimesRomanItalic);
     
     const pages = pdf.getPages();
-    const pageIdx = position.page - 1;
+    const pageIdx = options.position.page - 1;
     
     if (pageIdx >= 0 && pageIdx < pages.length) {
       const page = pages[pageIdx];
       
-      page.drawText(signatureText, {
-        x: position.x,
-        y: position.y,
-        size: 24,
-        font,
-        color: rgb(0, 0, 0.5),
-      });
-      
-      page.drawLine({
-        start: { x: position.x, y: position.y - 5 },
-        end: { x: position.x + font.widthOfTextAtSize(signatureText, 24), y: position.y - 5 },
-        thickness: 1,
-        color: rgb(0, 0, 0),
-      });
+      if (options.signatureType === 'drawn' && options.signatureImage) {
+        const base64Data = options.signatureImage.replace(/^data:image\/png;base64,/, '');
+        const imageBytes = Buffer.from(base64Data, 'base64');
+        const pngImage = await pdf.embedPng(imageBytes);
+        
+        const scaleFactor = 0.5;
+        const imgWidth = pngImage.width * scaleFactor;
+        const imgHeight = pngImage.height * scaleFactor;
+        
+        page.drawImage(pngImage, {
+          x: options.position.x - imgWidth / 2,
+          y: options.position.y - imgHeight / 2,
+          width: imgWidth,
+          height: imgHeight,
+        });
+      } else {
+        const font = await pdf.embedFont(StandardFonts.TimesRomanItalic);
+        const text = options.signatureText || 'Signature';
+        
+        page.drawText(text, {
+          x: options.position.x,
+          y: options.position.y,
+          size: 24,
+          font,
+          color: rgb(0.1, 0.2, 0.4),
+        });
+        
+        page.drawLine({
+          start: { x: options.position.x, y: options.position.y - 5 },
+          end: { x: options.position.x + font.widthOfTextAtSize(text, 24), y: options.position.y - 5 },
+          thickness: 1,
+          color: rgb(0, 0, 0),
+        });
+      }
     }
     
     const newPdfBytes = await pdf.save();
