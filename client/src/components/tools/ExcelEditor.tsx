@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Minus, Table } from "lucide-react";
@@ -14,10 +14,12 @@ export function ExcelEditor({ onDataChange }: ExcelEditorProps) {
     ["", "", ""],
     ["", "", ""]
   ]);
+  const onDataChangeRef = useRef(onDataChange);
+  onDataChangeRef.current = onDataChange;
 
   useEffect(() => {
-    onDataChange({ headers, rows });
-  }, [headers, rows, onDataChange]);
+    onDataChangeRef.current({ headers, rows });
+  }, [headers, rows]);
 
   const addColumn = () => {
     const colName = `Column ${String.fromCharCode(65 + headers.length)}`;

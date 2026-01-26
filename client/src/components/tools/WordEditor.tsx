@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { Editor } from "@tinymce/tinymce-react";
-import { Button } from "@/components/ui/button";
 import { FileText, Loader2 } from "lucide-react";
 
 interface WordEditorProps {
@@ -11,10 +10,12 @@ export function WordEditor({ onContentChange }: WordEditorProps) {
   const [content, setContent] = useState("");
   const [editorReady, setEditorReady] = useState(false);
   const editorRef = useRef<any>(null);
+  const onContentChangeRef = useRef(onContentChange);
+  onContentChangeRef.current = onContentChange;
 
   useEffect(() => {
-    onContentChange(content);
-  }, [content, onContentChange]);
+    onContentChangeRef.current(content);
+  }, [content]);
 
   return (
     <div className="w-full max-w-4xl space-y-4">

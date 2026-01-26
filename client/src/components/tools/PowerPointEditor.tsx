@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,10 +21,12 @@ export function PowerPointEditor({ onSlidesChange }: PowerPointEditorProps) {
     { id: "slide-2", title: "Second Slide", content: "More amazing content goes here!" }
   ]);
   const [activeSlide, setActiveSlide] = useState<string>("slide-1");
+  const onSlidesChangeRef = useRef(onSlidesChange);
+  onSlidesChangeRef.current = onSlidesChange;
 
   useEffect(() => {
-    onSlidesChange(slides.map(s => ({ title: s.title, content: s.content })));
-  }, [slides, onSlidesChange]);
+    onSlidesChangeRef.current(slides.map(s => ({ title: s.title, content: s.content })));
+  }, [slides]);
 
   const addSlide = () => {
     const newId = `slide-${Date.now()}`;

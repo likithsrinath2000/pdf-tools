@@ -180,6 +180,52 @@ export function Navbar() {
                   </div>
                </NavigationMenuContent>
             </NavigationMenuItem>
+
+            <NavigationMenuItem>
+               <NavigationMenuTrigger className="bg-transparent hover:bg-slate-100 font-semibold">
+                Create Office
+               </NavigationMenuTrigger>
+               <NavigationMenuContent>
+                  <div className="w-[320px] p-6 bg-white rounded-xl shadow-xl">
+                    <h4 className="font-bold text-sm text-indigo-600 uppercase tracking-wider mb-4">Create Office Documents</h4>
+                    <ul className="space-y-3">
+                      <li>
+                        <NavigationMenuLink asChild>
+                          <Link href="/create-word" className="flex items-center gap-3 p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-blue-50 transition-colors">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center text-white text-sm font-bold">W</div>
+                            <div>
+                              <div className="font-medium">Create Word Doc</div>
+                              <div className="text-xs text-slate-400">Write and download .docx</div>
+                            </div>
+                          </Link>
+                        </NavigationMenuLink>
+                      </li>
+                      <li>
+                        <NavigationMenuLink asChild>
+                          <Link href="/create-excel" className="flex items-center gap-3 p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-green-50 transition-colors">
+                            <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center text-white text-sm font-bold">X</div>
+                            <div>
+                              <div className="font-medium">Create Excel</div>
+                              <div className="text-xs text-slate-400">Build spreadsheets .xlsx</div>
+                            </div>
+                          </Link>
+                        </NavigationMenuLink>
+                      </li>
+                      <li>
+                        <NavigationMenuLink asChild>
+                          <Link href="/create-powerpoint" className="flex items-center gap-3 p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-orange-50 transition-colors">
+                            <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white text-sm font-bold">P</div>
+                            <div>
+                              <div className="font-medium">Create PowerPoint</div>
+                              <div className="text-xs text-slate-400">Design presentations .pptx</div>
+                            </div>
+                          </Link>
+                        </NavigationMenuLink>
+                      </li>
+                    </ul>
+                  </div>
+               </NavigationMenuContent>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
       </div>
@@ -382,6 +428,34 @@ export function Navbar() {
                           </div>
                         </Link>
                       ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="create-office">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                      Create Office
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      <Link href="/create-word" onClick={closeMenu}>
+                        <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                          Create Word Doc
+                        </div>
+                      </Link>
+                      <Link href="/create-excel" onClick={closeMenu}>
+                        <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                          Create Excel
+                        </div>
+                      </Link>
+                      <Link href="/create-powerpoint" onClick={closeMenu}>
+                        <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                          Create PowerPoint
+                        </div>
+                      </Link>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
