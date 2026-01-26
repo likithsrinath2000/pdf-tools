@@ -6,7 +6,7 @@ import { TOOLS } from "@/lib/constants";
 import { FileUploader } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle, X, Unlock, ShieldCheck } from "lucide-react";
+import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle, X, Unlock, ShieldCheck, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NotFound from "./not-found";
 import { apiClient } from "@/lib/api";
@@ -412,10 +412,16 @@ export default function ToolPage() {
                     <Download className="mr-2 h-5 w-5" /> Download File
                   </Button>
                   
-                  <div className="flex gap-3 justify-center">
-                    <Button variant="ghost" onClick={handleReset} data-testid="button-reset">
-                       Start Over
-                    </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleReset}
+                    className="w-full h-12 text-base rounded-xl border-2 hover:bg-slate-50"
+                    data-testid="button-process-another"
+                  >
+                    <Plus className="mr-2 h-5 w-5" /> Process Another File
+                  </Button>
+                  
+                  <div className="flex gap-3 justify-center pt-2">
                     <Button 
                       variant="ghost" 
                       onClick={handleDeleteFile} 
