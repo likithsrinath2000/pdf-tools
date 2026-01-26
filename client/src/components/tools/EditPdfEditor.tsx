@@ -15,11 +15,15 @@ import {
   Trash2,
   Move,
   Undo,
-  Redo
+  Redo,
+  Loader2
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 
 interface EditPdfEditorProps {
   files: File[];
@@ -48,7 +52,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [pageCount, setPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageImage, setPageImage] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolType>("select");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentColor, setCurrentColor] = useState("#ff0000");
@@ -57,44 +61,20 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
-  const [history, setHistory] = useState<Annotation[][]>([[]]);
-  const [historyIndex, setHistoryIndex] = useState(0);
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [showTextInput, setShowTextInput] = useState(false);
   const [textPosition, setTextPosition] = useState<{ x: number; y: number } | null>(null);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const onOptionsChangeRef = useRef(onOptionsChange);
+  const initializedRef = useRef(false);
 
-  const renderPage = useCallback(async (pageNum: number) => {
-    if (!pdfDocRef.current) return;
-    
-    setLoading(true);
-    try {
-      const page = await pdfDocRef.current.getPage(pageNum);
-      const scale = 1.5;
-      const viewport = page.getViewport({ scale });
-      
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d")!;
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      
-      await page.render({
-        canvasContext: context,
-        viewport: viewport,
-        canvas: canvas,
-      } as any).promise;
-      
-      setPageImage(canvas.toDataURL("image/png"));
-    } catch (error) {
-      console.error("Error rendering page:", error);
-    }
-    setLoading(false);
-  }, []);
+  onOptionsChangeRef.current = onOptionsChange;
 
   useEffect(() => {
-    if (files.length === 0) return;
+    if (files.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
 
     const loadPdf = async () => {
       setLoading(true);
@@ -104,7 +84,16 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         pdfDocRef.current = pdf;
         setPageCount(pdf.numPages);
-        await renderPage(1);
+        
+        const page = await pdf.getPage(1);
+        const scale = 1.5;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d")!;
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        await page.render({ canvasContext: context, viewport } as any).promise;
+        setPageImage(canvas.toDataURL("image/png"));
       } catch (error) {
         console.error("Error loading PDF:", error);
       }
@@ -112,41 +101,43 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     };
 
     loadPdf();
-  }, [files, renderPage]);
+  }, [files]);
+
+  const renderCurrentPage = useCallback(async () => {
+    if (!pdfDocRef.current) return;
+    
+    setLoading(true);
+    try {
+      const page = await pdfDocRef.current.getPage(currentPage);
+      const scale = 1.5;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d")!;
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      await page.render({ canvasContext: context, viewport } as any).promise;
+      setPageImage(canvas.toDataURL("image/png"));
+    } catch (error) {
+      console.error("Error rendering page:", error);
+    }
+    setLoading(false);
+  }, [currentPage]);
+
+  const changePage = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pageCount && newPage !== currentPage) {
+      setCurrentPage(newPage);
+    }
+  };
 
   useEffect(() => {
-    if (pdfDocRef.current) {
-      renderPage(currentPage);
+    if (pdfDocRef.current && currentPage > 0) {
+      renderCurrentPage();
     }
-  }, [currentPage, renderPage]);
-
-  const onOptionsChangeRef = useRef(onOptionsChange);
-  onOptionsChangeRef.current = onOptionsChange;
+  }, [currentPage, renderCurrentPage]);
 
   useEffect(() => {
     onOptionsChangeRef.current({ annotations, pageCount });
   }, [annotations, pageCount]);
-
-  const addToHistory = (newAnnotations: Annotation[]) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push([...newAnnotations]);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  };
-
-  const undo = () => {
-    if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      setAnnotations([...history[historyIndex - 1]]);
-    }
-  };
-
-  const redo = () => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      setAnnotations([...history[historyIndex + 1]]);
-    }
-  };
 
   const getRelativePosition = (e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -197,7 +188,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     const pos = getRelativePosition(e);
     
     if (selectedTool === "freehand") {
-      setCurrentPoints([...currentPoints, pos]);
+      setCurrentPoints(prev => [...prev, pos]);
     }
   };
 
@@ -230,10 +221,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       newAnnotation.y = 0;
     }
 
-    const newAnnotations = [...annotations, newAnnotation];
-    setAnnotations(newAnnotations);
-    addToHistory(newAnnotations);
-    
+    setAnnotations(prev => [...prev, newAnnotation]);
     setIsDrawing(false);
     setDrawStart(null);
     setCurrentPoints([]);
@@ -255,10 +243,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       height: fontSize * 1.2,
     };
 
-    const newAnnotations = [...annotations, newAnnotation];
-    setAnnotations(newAnnotations);
-    addToHistory(newAnnotations);
-    
+    setAnnotations(prev => [...prev, newAnnotation]);
     setTextInput("");
     setShowTextInput(false);
     setTextPosition(null);
@@ -266,9 +251,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
 
   const deleteSelected = () => {
     if (!selectedAnnotation) return;
-    const newAnnotations = annotations.filter((a) => a.id !== selectedAnnotation);
-    setAnnotations(newAnnotations);
-    addToHistory(newAnnotations);
+    setAnnotations(prev => prev.filter((a) => a.id !== selectedAnnotation));
     setSelectedAnnotation(null);
   };
 
@@ -276,20 +259,29 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
 
   const tools: { id: ToolType; icon: any; label: string }[] = [
     { id: "select", icon: Move, label: "Select" },
-    { id: "text", icon: Type, label: "Add Text" },
-    { id: "rectangle", icon: Square, label: "Rectangle" },
+    { id: "text", icon: Type, label: "Text" },
+    { id: "rectangle", icon: Square, label: "Rect" },
     { id: "circle", icon: Circle, label: "Circle" },
     { id: "line", icon: Minus, label: "Line" },
     { id: "highlight", icon: Highlighter, label: "Highlight" },
     { id: "freehand", icon: Pencil, label: "Draw" },
   ];
 
-  const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#000000", "#ffffff"];
+  const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#000000"];
 
   if (files.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-8">
         Upload a PDF to start editing
+      </div>
+    );
+  }
+
+  if (loading && !pageImage) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-16 space-y-4">
+        <Loader2 className="w-12 h-12 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading PDF...</p>
       </div>
     );
   }
@@ -310,27 +302,6 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               {tool.label}
             </Button>
           ))}
-          
-          <div className="border-l pl-2 ml-2 flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={undo}
-              disabled={historyIndex === 0}
-              data-testid="undo-btn"
-            >
-              <Undo className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={redo}
-              disabled={historyIndex === history.length - 1}
-              data-testid="redo-btn"
-            >
-              <Redo className="h-4 w-4" />
-            </Button>
-          </div>
 
           {selectedAnnotation && (
             <Button
@@ -383,7 +354,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+            onClick={() => changePage(currentPage - 1)}
             disabled={currentPage === 1}
             data-testid="prev-page"
           >
@@ -395,7 +366,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage(Math.min(pageCount, currentPage + 1))}
+            onClick={() => changePage(currentPage + 1)}
             disabled={currentPage === pageCount}
             data-testid="next-page"
           >
@@ -419,149 +390,130 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
             }
           }}
         >
-          {loading ? (
-            <div className="flex items-center justify-center h-64 w-96">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
+          {pageImage ? (
+            <img src={pageImage} alt={`Page ${currentPage}`} className="max-w-full" draggable={false} />
           ) : (
-            <>
-              <img src={pageImage} alt={`Page ${currentPage}`} className="max-w-full" draggable={false} />
-              
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                {pageAnnotations.map((ann) => {
-                  const isSelected = ann.id === selectedAnnotation;
-                  const strokeWidth = isSelected ? 3 : 2;
-
-                  if (ann.type === "rectangle") {
-                    return (
-                      <rect
-                        key={ann.id}
-                        x={ann.x}
-                        y={ann.y}
-                        width={ann.width}
-                        height={ann.height}
-                        fill="none"
-                        stroke={ann.color}
-                        strokeWidth={strokeWidth}
-                        strokeDasharray={isSelected ? "5,5" : undefined}
-                      />
-                    );
-                  }
-
-                  if (ann.type === "circle") {
-                    const rx = (ann.width || 0) / 2;
-                    const ry = (ann.height || 0) / 2;
-                    return (
-                      <ellipse
-                        key={ann.id}
-                        cx={ann.x + rx}
-                        cy={ann.y + ry}
-                        rx={rx}
-                        ry={ry}
-                        fill="none"
-                        stroke={ann.color}
-                        strokeWidth={strokeWidth}
-                        strokeDasharray={isSelected ? "5,5" : undefined}
-                      />
-                    );
-                  }
-
-                  if (ann.type === "line") {
-                    return (
-                      <line
-                        key={ann.id}
-                        x1={ann.x}
-                        y1={ann.y}
-                        x2={ann.endX}
-                        y2={ann.endY}
-                        stroke={ann.color}
-                        strokeWidth={strokeWidth}
-                        strokeDasharray={isSelected ? "5,5" : undefined}
-                      />
-                    );
-                  }
-
-                  if (ann.type === "highlight") {
-                    return (
-                      <rect
-                        key={ann.id}
-                        x={ann.x}
-                        y={ann.y}
-                        width={ann.width}
-                        height={ann.height}
-                        fill={ann.color}
-                        opacity={0.3}
-                        stroke={isSelected ? ann.color : "none"}
-                        strokeWidth={isSelected ? 2 : 0}
-                        strokeDasharray={isSelected ? "5,5" : undefined}
-                      />
-                    );
-                  }
-
-                  if (ann.type === "freehand" && ann.points) {
-                    const d = ann.points
-                      .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-                      .join(" ");
-                    return (
-                      <path
-                        key={ann.id}
-                        d={d}
-                        fill="none"
-                        stroke={ann.color}
-                        strokeWidth={strokeWidth}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    );
-                  }
-
-                  if (ann.type === "text") {
-                    return (
-                      <text
-                        key={ann.id}
-                        x={ann.x}
-                        y={ann.y + (ann.fontSize || 16)}
-                        fill={ann.color}
-                        fontSize={ann.fontSize}
-                        fontFamily="Arial, sans-serif"
-                        style={{ 
-                          textDecoration: isSelected ? "underline" : "none",
-                          fontWeight: isSelected ? "bold" : "normal"
-                        }}
-                      >
-                        {ann.text}
-                      </text>
-                    );
-                  }
-
-                  return null;
-                })}
-
-                {isDrawing && drawStart && selectedTool === "rectangle" && (
-                  <rect
-                    x={Math.min(drawStart.x, (canvasRef.current?.getBoundingClientRect().left || 0))}
-                    y={Math.min(drawStart.y, 0)}
-                    width={50}
-                    height={50}
-                    fill="none"
-                    stroke={currentColor}
-                    strokeWidth={2}
-                    strokeDasharray="5,5"
-                  />
-                )}
-
-                {isDrawing && currentPoints.length > 0 && selectedTool === "freehand" && (
-                  <path
-                    d={currentPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")}
-                    fill="none"
-                    stroke={currentColor}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                  />
-                )}
-              </svg>
-            </>
+            <div className="w-96 h-64 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
           )}
+          
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            {pageAnnotations.map((ann) => {
+              const isSelected = ann.id === selectedAnnotation;
+              const strokeWidth = isSelected ? 3 : 2;
+
+              if (ann.type === "rectangle") {
+                return (
+                  <rect
+                    key={ann.id}
+                    x={ann.x}
+                    y={ann.y}
+                    width={ann.width}
+                    height={ann.height}
+                    fill="none"
+                    stroke={ann.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={isSelected ? "5,5" : undefined}
+                  />
+                );
+              }
+
+              if (ann.type === "circle") {
+                const rx = (ann.width || 0) / 2;
+                const ry = (ann.height || 0) / 2;
+                return (
+                  <ellipse
+                    key={ann.id}
+                    cx={ann.x + rx}
+                    cy={ann.y + ry}
+                    rx={rx}
+                    ry={ry}
+                    fill="none"
+                    stroke={ann.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={isSelected ? "5,5" : undefined}
+                  />
+                );
+              }
+
+              if (ann.type === "line") {
+                return (
+                  <line
+                    key={ann.id}
+                    x1={ann.x}
+                    y1={ann.y}
+                    x2={ann.endX}
+                    y2={ann.endY}
+                    stroke={ann.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={isSelected ? "5,5" : undefined}
+                  />
+                );
+              }
+
+              if (ann.type === "highlight") {
+                return (
+                  <rect
+                    key={ann.id}
+                    x={ann.x}
+                    y={ann.y}
+                    width={ann.width}
+                    height={ann.height}
+                    fill={ann.color}
+                    opacity={0.3}
+                    stroke={isSelected ? ann.color : "none"}
+                    strokeWidth={isSelected ? 2 : 0}
+                    strokeDasharray={isSelected ? "5,5" : undefined}
+                  />
+                );
+              }
+
+              if (ann.type === "freehand" && ann.points) {
+                const d = ann.points
+                  .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+                  .join(" ");
+                return (
+                  <path
+                    key={ann.id}
+                    d={d}
+                    fill="none"
+                    stroke={ann.color}
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                );
+              }
+
+              if (ann.type === "text") {
+                return (
+                  <text
+                    key={ann.id}
+                    x={ann.x}
+                    y={ann.y + (ann.fontSize || 16)}
+                    fill={ann.color}
+                    fontSize={ann.fontSize}
+                    fontFamily="Arial, sans-serif"
+                  >
+                    {ann.text}
+                  </text>
+                );
+              }
+
+              return null;
+            })}
+
+            {isDrawing && currentPoints.length > 0 && selectedTool === "freehand" && (
+              <path
+                d={currentPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")}
+                fill="none"
+                stroke={currentColor}
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            )}
+          </svg>
 
           {showTextInput && textPosition && (
             <div
@@ -604,7 +556,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       </div>
 
       <p className="text-sm text-muted-foreground text-center">
-        Pro tip: Click to add text, drag to draw shapes. Your artistic skills (or lack thereof) are preserved! 🎨
+        Click to add text, drag to draw shapes. Your annotations will be saved to the PDF!
       </p>
     </div>
   );
