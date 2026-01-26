@@ -6,7 +6,7 @@ import { TOOLS } from "@/lib/constants";
 import { FileUploader } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle } from "lucide-react";
+import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NotFound from "./not-found";
 import { apiClient } from "@/lib/api";
@@ -105,6 +105,18 @@ export default function ToolPage() {
     setCurrentJob(null);
     setError(null);
     setProcessingOptions({});
+  };
+
+  const handleDeleteFile = async () => {
+    if (!currentJob) return;
+    
+    try {
+      await apiClient.deleteJob(currentJob.id);
+      handleReset();
+    } catch (err: any) {
+      console.error("Failed to delete file:", err);
+      handleReset();
+    }
   };
 
   // Determine if we show the default list or a custom editor
@@ -228,9 +240,17 @@ export default function ToolPage() {
                     <Download className="mr-2 h-5 w-5" /> Download File
                   </Button>
                   
-                  <div className="flex gap-2 justify-center">
+                  <div className="flex gap-3 justify-center">
                     <Button variant="ghost" onClick={handleReset} data-testid="button-reset">
                        Start Over
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleDeleteFile} 
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                      data-testid="button-delete"
+                    >
+                      <Trash2 className="mr-1 h-4 w-4" /> Delete File
                     </Button>
                   </div>
                 </div>
