@@ -58,11 +58,13 @@ export default function Home() {
         <div className="max-w-7xl mx-auto mt-32 grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
             <h2 className="text-4xl font-bold font-display">
-              The PDF software to keep your business moving
+              Because life is too short to fight with printers
             </h2>
-            <p className="text-lg text-muted-foreground">
-              We provide all the features you need to manage your documents effectively. 
-              Our tools are secure, fast, and easy to use on any device.
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              We created these tools so you don't have to throw your laptop out the window. 
+              Merge, split, and compress PDFs without crying. It's almost fun. Almost.
+              <br/><br/>
+              (We also promise not to ask you for your mother's maiden name just to rotate a page.)
             </p>
           </div>
           <div className="relative h-64 md:h-96 rounded-3xl bg-slate-200 overflow-hidden shadow-2xl">
