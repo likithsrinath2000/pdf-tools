@@ -319,5 +319,15 @@ export const TOOLS: Tool[] = [
     accept: ".jpg,.jpeg,.png,.svg,.gif",
     action: "Resize Image",
     category: "image-tools"
+  },
+  {
+    id: "rotate-image",
+    title: "Rotate Image",
+    description: "Rotate your images by 90, 180, or 270 degrees. For when your photos decide to be rebels.",
+    icon: RotateCw,
+    color: "bg-blue-600",
+    accept: ".jpg,.jpeg,.png,.gif",
+    action: "Rotate Image",
+    category: "image-tools"
   }
 ];

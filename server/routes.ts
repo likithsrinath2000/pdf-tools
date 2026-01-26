@@ -8,7 +8,7 @@ import { pdfService } from "./services/pdf.service";
 import { imageService } from "./services/image.service";
 import { officeService } from "./services/office.service";
 import { randomUUID } from "crypto";
-import { logger, logJobCreated, logJobCompleted, logJobFailed, logRequest } from "./logger";
+import { logger, logJobCreated, logJobCompleted, logJobFailed, logRequest, logToolExecution, logJobProgress, logFileOperation } from "./logger";
 import { register, httpRequestDuration, jobsProcessed, activeJobs, fileSizeProcessed } from "./metrics";
 
 const upload = multer({ 
@@ -85,13 +85,17 @@ export async function registerRoutes(
         options: parsedOptions as any,
       });
 
-      logJobCreated(job.id, toolId, files.length);
+      logJobCreated(job.id, toolId, files.length, parsedOptions);
       activeJobs.inc();
       
       const totalSize = files.reduce((sum, f) => sum + f.size, 0);
       fileSizeProcessed.observe({ tool_id: toolId }, totalSize);
+      
+      logger.debug(`Job ${job.id} queued with options: ${JSON.stringify(parsedOptions)}`);
 
-      processJobAsync(job.id, toolId, inputFiles, parsedOptions).catch(console.error);
+      processJobAsync(job.id, toolId, inputFiles, parsedOptions).catch(err => {
+        logger.error(`Unhandled error in job ${job.id}:`, err);
+      });
 
       res.json({ jobId: job.id });
     } catch (error: any) {
@@ -161,15 +165,20 @@ async function processJobAsync(
 ): Promise<void> {
   const startTime = Date.now();
   try {
+    logJobProgress(jobId, toolId, 10, 'starting');
     await storage.updateJobStatus(jobId, "processing", 10);
-    logger.info(`Processing job ${jobId} for tool ${toolId}`);
+    
+    logToolExecution(toolId, jobId, inputFiles.map(f => f.path), options);
 
     const outputDir = "output_files";
     await fs.mkdir(outputDir, { recursive: true });
     
     const outputFileName = `${toolId}_${randomUUID()}${getOutputExtension(toolId)}`;
     const outputPath = path.join(outputDir, outputFileName);
+    
+    logger.debug(`Output will be saved to: ${outputPath}`);
 
+    logJobProgress(jobId, toolId, 30, 'processing');
     await storage.updateJobStatus(jobId, "processing", 30);
 
     switch (toolId) {
@@ -324,6 +333,7 @@ async function processJobAsync(
         throw new Error(`Unknown tool: ${toolId}`);
     }
 
+    logJobProgress(jobId, toolId, 90, 'finalizing');
     await storage.updateJobStatus(jobId, "processing", 90);
 
     const actualOutput = toolId === 'split-pdf' || toolId === 'pdf-to-jpg'
@@ -331,18 +341,27 @@ async function processJobAsync(
       : outputPath;
 
     await storage.updateJobOutput(jobId, actualOutput);
+    
+    let outputSize: number | undefined;
+    try {
+      const stats = await fs.stat(actualOutput);
+      outputSize = stats.size;
+      logFileOperation('created', actualOutput, true, `${(outputSize / 1024 / 1024).toFixed(2)}MB`);
+    } catch {}
 
     for (const file of inputFiles) {
       await fs.unlink(file.path).catch(() => {});
+      logFileOperation('cleanup', file.path, true);
     }
 
     const duration = (Date.now() - startTime) / 1000;
-    logJobCompleted(jobId, toolId, duration);
+    logJobCompleted(jobId, toolId, duration, outputSize);
     jobsProcessed.inc({ tool_id: toolId, status: 'completed' });
     activeJobs.dec();
   } catch (error: any) {
-    logger.error(`Job ${jobId} failed:`, error);
-    logJobFailed(jobId, toolId, error.message);
+    const duration = (Date.now() - startTime) / 1000;
+    logger.error(`Job ${jobId} failed after ${duration.toFixed(2)}s:`, error);
+    logJobFailed(jobId, toolId, error.message, error.stack);
     await storage.updateJobError(jobId, error.message);
     
     for (const file of inputFiles) {
@@ -378,6 +397,13 @@ function getOutputExtension(toolId: string): string {
     "resize-image": ".jpg",
     "crop-image": ".jpg",
     "rotate-image": ".jpg",
+    "rotate-pdf": ".pdf",
+    "add-page-numbers": ".pdf",
+    "add-watermark": ".pdf",
+    "edit-pdf": ".pdf",
+    "sign-pdf": ".pdf",
+    "repair-pdf": ".pdf",
+    "pdf-to-pdfa": ".pdf",
     "convert-image": ".jpg",
   };
   return extensionMap[toolId] || ".pdf";
