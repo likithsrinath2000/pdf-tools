@@ -2,6 +2,25 @@ import { useState, useRef, useEffect } from "react";
 import { Editor } from "@tinymce/tinymce-react";
 import { FileText, Loader2 } from "lucide-react";
 
+import "tinymce/tinymce";
+import "tinymce/models/dom";
+import "tinymce/themes/silver";
+import "tinymce/icons/default";
+import "tinymce/plugins/advlist";
+import "tinymce/plugins/autolink";
+import "tinymce/plugins/lists";
+import "tinymce/plugins/link";
+import "tinymce/plugins/charmap";
+import "tinymce/plugins/anchor";
+import "tinymce/plugins/searchreplace";
+import "tinymce/plugins/visualblocks";
+import "tinymce/plugins/code";
+import "tinymce/plugins/fullscreen";
+import "tinymce/plugins/insertdatetime";
+import "tinymce/plugins/table";
+import "tinymce/plugins/wordcount";
+import "tinymce/skins/ui/oxide/skin.css";
+
 interface WordEditorProps {
   onContentChange: (content: string) => void;
 }
@@ -37,13 +56,13 @@ export function WordEditor({ onContentChange }: WordEditorProps) {
           </div>
         )}
         <Editor
-          tinymceScriptSrc="/tinymce/tinymce.min.js"
           onInit={(evt, editor) => {
             editorRef.current = editor;
             setEditorReady(true);
           }}
           value={content}
           onEditorChange={(newContent) => setContent(newContent)}
+          licenseKey="gpl"
           init={{
             height: 400,
             menubar: true,
@@ -54,8 +73,8 @@ export function WordEditor({ onContentChange }: WordEditorProps) {
             ],
             toolbar: 'undo redo | blocks | bold italic forecolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | removeformat',
             content_style: 'body { font-family: Arial, sans-serif; font-size: 14px; }',
-            skin: 'oxide',
-            content_css: 'default',
+            skin: false,
+            content_css: false,
             branding: false,
             promotion: false,
           }}
