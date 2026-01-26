@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Reorder } from "framer-motion";
 import { FileText, GripVertical, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import * as pdfjsLib from "pdfjs-dist";
+import { getCachedThumbnail, setCachedThumbnail, getFileHash, generateCacheKey } from "@/lib/thumbnailCache";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
@@ -33,11 +34,15 @@ interface FileInfo {
   thumbnail: string | null;
 }
 
-export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: MergeEditorProps) {
+const THUMBNAIL_SCALE = 0.5;
+const FILE_THUMBNAIL_SCALE = 0.15;
+
+function MergeEditorComponent({ files, onReorder, onRemove, onPageOrderChange }: MergeEditorProps) {
   const [mode, setMode] = useState<"file" | "page">("file");
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [fileInfos, setFileInfos] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [hoveredPage, setHoveredPage] = useState<PageInfo | null>(null);
   const processedFilesRef = useRef<string>("");
   const onPageOrderChangeRef = useRef(onPageOrderChange);
@@ -46,7 +51,7 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
-    scale: number = 0.5
+    scale: number = THUMBNAIL_SCALE
   ): Promise<string> => {
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
@@ -62,7 +67,7 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
       canvasContext: context,
       viewport: viewport,
     } as any).promise;
-    return canvas.toDataURL("image/jpeg", 0.85);
+    return canvas.toDataURL("image/jpeg", 0.8);
   }, []);
 
   useEffect(() => {
@@ -81,32 +86,72 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
       }
 
       setLoading(true);
+      setLoadingProgress(0);
       
       try {
         const allPages: PageInfo[] = [];
         const infos: FileInfo[] = [];
+        let totalPages = 0;
+        let processedPages = 0;
+        
+        const fileHashes: string[] = [];
+        for (const file of files) {
+          fileHashes.push(await getFileHash(file));
+        }
         
         for (let fIndex = 0; fIndex < files.length; fIndex++) {
           const file = files[fIndex];
           const fileKey = `${file.name}-${file.size}-${fIndex}`;
+          const fileHash = fileHashes[fIndex];
           
           try {
             const arrayBuffer = await file.arrayBuffer();
             const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const pageCount = pdfDoc.numPages;
+            totalPages += pageCount;
             
-            const fileThumbnail = await renderPageToCanvas(pdfDoc, 1, 0.15);
+            const fileCacheKey = generateCacheKey(fileHash, 1, FILE_THUMBNAIL_SCALE);
+            let fileThumbnail = await getCachedThumbnail(fileCacheKey);
+            if (!fileThumbnail) {
+              fileThumbnail = await renderPageToCanvas(pdfDoc, 1, FILE_THUMBNAIL_SCALE);
+              await setCachedThumbnail(fileCacheKey, fileThumbnail);
+            }
             infos.push({ file, index: fIndex, pageCount, thumbnail: fileThumbnail });
             
-            for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-              const pageThumbnail = await renderPageToCanvas(pdfDoc, pageNum, 0.5);
-              allPages.push({
-                id: `${fileKey}-page-${pageNum}`,
-                fileIndex: fIndex,
-                fileName: file.name,
-                pageNumber: pageNum,
-                thumbnail: pageThumbnail,
-              });
+            const batchSize = 4;
+            for (let batch = 0; batch < Math.ceil(pageCount / batchSize); batch++) {
+              const batchPromises: Promise<PageInfo>[] = [];
+              
+              for (let i = 0; i < batchSize; i++) {
+                const pageNum = batch * batchSize + i + 1;
+                if (pageNum > pageCount) break;
+                
+                batchPromises.push((async () => {
+                  const cacheKey = generateCacheKey(fileHash, pageNum, THUMBNAIL_SCALE);
+                  let pageThumbnail = await getCachedThumbnail(cacheKey);
+                  
+                  if (!pageThumbnail) {
+                    pageThumbnail = await renderPageToCanvas(pdfDoc, pageNum, THUMBNAIL_SCALE);
+                    await setCachedThumbnail(cacheKey, pageThumbnail);
+                  }
+                  
+                  return {
+                    id: `${fileKey}-page-${pageNum}`,
+                    fileIndex: fIndex,
+                    fileName: file.name,
+                    pageNumber: pageNum,
+                    thumbnail: pageThumbnail,
+                  };
+                })());
+              }
+              
+              const batchResults = await Promise.all(batchPromises);
+              allPages.push(...batchResults);
+              processedPages += batchResults.length;
+              
+              if (totalPages > 0) {
+                setLoadingProgress(Math.round((processedPages / Math.max(totalPages, files.length * 5)) * 100));
+              }
             }
             
             pdfDoc.destroy();
@@ -196,9 +241,12 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
       {mode === "file" ? (
         <div>
           {loading ? (
-            <div className="flex items-center justify-center py-8 gap-3">
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span className="text-muted-foreground">Processing PDFs...</span>
+              <span className="text-muted-foreground">Processing PDFs... {loadingProgress}%</span>
+              <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${loadingProgress}%` }} />
+              </div>
             </div>
           ) : (
             <Reorder.Group 
@@ -256,9 +304,12 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
       ) : (
         <div>
           {loading ? (
-            <div className="flex items-center justify-center py-8 gap-3">
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span className="text-muted-foreground">Rendering page thumbnails...</span>
+              <span className="text-muted-foreground">Rendering page thumbnails... {loadingProgress}%</span>
+              <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${loadingProgress}%` }} />
+              </div>
             </div>
           ) : (
             <div className="flex gap-6">
@@ -363,3 +414,5 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
     </div>
   );
 }
+
+export const MergeEditor = memo(MergeEditorComponent);

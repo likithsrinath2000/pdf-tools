@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { Reorder } from "framer-motion";
 import { FileText, GripVertical, RotateCw, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as pdfjsLib from "pdfjs-dist";
+import { getCachedThumbnail, setCachedThumbnail, getFileHash, generateCacheKey } from "@/lib/thumbnailCache";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
@@ -21,17 +22,21 @@ interface OrganizePdfEditorProps {
   onOptionsChange: (options: { pageOrder: number[]; rotations: Record<number, number> }) => void;
 }
 
-export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorProps) {
+const THUMBNAIL_SCALE = 0.5;
+
+function OrganizePdfEditorComponent({ files, onOptionsChange }: OrganizePdfEditorProps) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [hoveredPage, setHoveredPage] = useState<PageInfo | null>(null);
   const onOptionsChangeRef = useRef(onOptionsChange);
+  const processedFileRef = useRef<string>("");
   onOptionsChangeRef.current = onOptionsChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
-    scale: number = 0.5
+    scale: number = THUMBNAIL_SCALE
   ): Promise<string> => {
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
@@ -41,29 +46,61 @@ export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorP
     canvas.height = viewport.height;
     canvas.width = viewport.width;
     await page.render({ canvasContext: context, viewport } as any).promise;
-    return canvas.toDataURL("image/jpeg", 0.85);
+    return canvas.toDataURL("image/jpeg", 0.8);
   }, []);
 
   useEffect(() => {
     const loadPages = async () => {
       if (files.length === 0) return;
+      
+      const file = files[0];
+      const fileKey = `${file.name}-${file.size}`;
+      
+      if (fileKey === processedFileRef.current) return;
+      
       setLoading(true);
+      setLoadingProgress(0);
+      
       try {
-        const file = files[0];
+        const fileHash = await getFileHash(file);
         const arrayBuffer = await file.arrayBuffer();
         const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const pageInfos: PageInfo[] = [];
+        const totalPages = pdfDoc.numPages;
         
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
-          const thumbnail = await renderPageToCanvas(pdfDoc, i);
-          pageInfos.push({
-            id: `page-${i}`,
-            pageNumber: i,
-            thumbnail,
-            rotation: 0
-          });
+        const batchSize = 4;
+        for (let batch = 0; batch < Math.ceil(totalPages / batchSize); batch++) {
+          const batchPromises: Promise<PageInfo>[] = [];
+          
+          for (let i = 0; i < batchSize; i++) {
+            const pageNum = batch * batchSize + i + 1;
+            if (pageNum > totalPages) break;
+            
+            batchPromises.push((async () => {
+              const cacheKey = generateCacheKey(fileHash, pageNum, THUMBNAIL_SCALE);
+              let thumbnail = await getCachedThumbnail(cacheKey);
+              
+              if (!thumbnail) {
+                thumbnail = await renderPageToCanvas(pdfDoc, pageNum);
+                await setCachedThumbnail(cacheKey, thumbnail);
+              }
+              
+              return {
+                id: `page-${pageNum}`,
+                pageNumber: pageNum,
+                thumbnail,
+                rotation: 0
+              };
+            })());
+          }
+          
+          const batchResults = await Promise.all(batchPromises);
+          pageInfos.push(...batchResults);
+          setLoadingProgress(Math.round((pageInfos.length / totalPages) * 100));
         }
+        
         setPages(pageInfos);
+        processedFileRef.current = fileKey;
         pdfDoc.destroy();
       } catch (err) {
         console.error("Error loading PDF:", err);
@@ -103,7 +140,13 @@ export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorP
     return (
       <div className="w-full max-w-4xl flex flex-col items-center justify-center py-16 space-y-4">
         <Loader2 className="w-12 h-12 animate-spin text-primary" />
-        <p className="text-muted-foreground">Loading PDF pages...</p>
+        <p className="text-muted-foreground">Loading PDF pages... {loadingProgress}%</p>
+        <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-primary transition-all duration-300" 
+            style={{ width: `${loadingProgress}%` }}
+          />
+        </div>
       </div>
     );
   }
@@ -240,3 +283,5 @@ export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorP
     </div>
   );
 }
+
+export const OrganizePdfEditor = memo(OrganizePdfEditorComponent);
