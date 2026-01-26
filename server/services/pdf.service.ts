@@ -145,13 +145,17 @@ export class PDFService {
     try {
       await fs.mkdir(outputDir, { recursive: true });
       
+      const formatFlag = format === 'jpg' ? '-jpeg' : '-png';
+      const prefix = path.join(outputDir, 'page');
+      
       await execPromise(
-        `pdftoppm "${inputPath}" "${path.join(outputDir, 'page')}" -${format}`
+        `pdftoppm ${formatFlag} "${inputPath}" "${prefix}"`
       );
       
       const files = await fs.readdir(outputDir);
+      const extension = format === 'jpg' ? '.jpg' : '.png';
       return files
-        .filter(f => f.startsWith('page'))
+        .filter(f => f.startsWith('page') && (f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.ppm')))
         .map(f => path.join(outputDir, f));
     } catch (error) {
       throw new Error(`Failed to convert PDF to images: ${error}`);
