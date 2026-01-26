@@ -6,7 +6,11 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import * as pdfjsLib from "pdfjs-dist";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use the bundled worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 
 interface MergeEditorProps {
   files: File[];
@@ -22,19 +26,26 @@ interface PageInfo {
   thumbnail: string | null;
 }
 
+interface FileInfo {
+  file: File;
+  index: number;
+  pageCount: number;
+  thumbnail: string | null;
+}
+
 export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
   const [mode, setMode] = useState<"file" | "page">("file");
   const [pages, setPages] = useState<PageInfo[]>([]);
+  const [fileInfos, setFileInfos] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [fileThumbnails, setFileThumbnails] = useState<Map<string, string>>(new Map());
-  const processedFilesRef = useRef<Set<string>>(new Set());
+  const processedFilesRef = useRef<string>("");
 
-  const renderPageThumbnail = useCallback(async (
-    pdf: pdfjsLib.PDFDocumentProxy,
+  const renderPageToCanvas = useCallback(async (
+    pdfDoc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
-    scale: number = 0.3
+    scale: number = 0.4
   ): Promise<string> => {
-    const page = await pdf.getPage(pageNum);
+    const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
     
     const canvas = document.createElement("canvas");
@@ -47,27 +58,22 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
     await page.render({
       canvasContext: context,
       viewport: viewport,
-      canvas: canvas,
     } as any).promise;
-    
-    return canvas.toDataURL("image/jpeg", 0.7);
+    return canvas.toDataURL("image/jpeg", 0.8);
   }, []);
 
   useEffect(() => {
     const processFiles = async () => {
       if (files.length === 0) {
         setPages([]);
-        processedFilesRef.current.clear();
-        setFileThumbnails(new Map());
+        setFileInfos([]);
+        processedFilesRef.current = "";
         return;
       }
 
-      const currentFileKeys = new Set(files.map((f, i) => `${f.name}-${f.size}-${i}`));
-      const previousFileKeys = processedFilesRef.current;
+      const currentFilesKey = files.map((f, i) => `${f.name}-${f.size}-${i}`).join("|");
       
-      const newFiles = files.filter((f, i) => !previousFileKeys.has(`${f.name}-${f.size}-${i}`));
-      
-      if (newFiles.length === 0 && currentFileKeys.size === previousFileKeys.size) {
+      if (currentFilesKey === processedFilesRef.current) {
         return;
       }
 
@@ -75,44 +81,50 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
       
       try {
         const allPages: PageInfo[] = [];
-        const newThumbnails = new Map(fileThumbnails);
+        const infos: FileInfo[] = [];
         
         for (let fIndex = 0; fIndex < files.length; fIndex++) {
           const file = files[fIndex];
           const fileKey = `${file.name}-${file.size}-${fIndex}`;
           
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          const pageCount = pdf.numPages;
-          
-          if (!newThumbnails.has(fileKey)) {
-            const firstPageThumb = await renderPageThumbnail(pdf, 1, 0.2);
-            newThumbnails.set(fileKey, firstPageThumb);
-          }
-          
-          for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-            const pageId = `${fileKey}-page-${pageNum}`;
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const pageCount = pdfDoc.numPages;
             
-            let thumbnail: string | null = null;
-            if (mode === "page" || pageNum === 1) {
-              thumbnail = await renderPageThumbnail(pdf, pageNum);
+            // Render first page thumbnail for file view
+            const fileThumbnail = await renderPageToCanvas(pdfDoc, 1, 0.15);
+            infos.push({ file, index: fIndex, pageCount, thumbnail: fileThumbnail });
+            
+            // Render all page thumbnails for page view
+            for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+              const pageThumbnail = await renderPageToCanvas(pdfDoc, pageNum, 0.3);
+              allPages.push({
+                id: `${fileKey}-page-${pageNum}`,
+                fileIndex: fIndex,
+                fileName: file.name,
+                pageNumber: pageNum,
+                thumbnail: pageThumbnail,
+              });
             }
             
+            pdfDoc.destroy();
+          } catch (err) {
+            console.error(`Error reading PDF ${file.name}:`, err);
+            infos.push({ file, index: fIndex, pageCount: 1, thumbnail: null });
             allPages.push({
-              id: pageId,
+              id: `${fileKey}-page-1`,
               fileIndex: fIndex,
               fileName: file.name,
-              pageNumber: pageNum,
-              thumbnail,
+              pageNumber: 1,
+              thumbnail: null,
             });
           }
-          
-          pdf.destroy();
         }
         
         setPages(allPages);
-        setFileThumbnails(newThumbnails);
-        processedFilesRef.current = currentFileKeys;
+        setFileInfos(infos);
+        processedFilesRef.current = currentFilesKey;
       } catch (error) {
         console.error("Error processing PDFs:", error);
       } finally {
@@ -121,15 +133,10 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
     };
 
     processFiles();
-  }, [files, mode, renderPageThumbnail, fileThumbnails]);
+  }, [files, renderPageToCanvas]);
 
-  const getFilePageCount = (fileIndex: number) => {
-    return pages.filter(p => p.fileIndex === fileIndex).length;
-  };
-
-  const getFileThumbnail = (file: File, index: number) => {
-    const fileKey = `${file.name}-${file.size}-${index}`;
-    return fileThumbnails.get(fileKey);
+  const getFileInfo = (fileIndex: number) => {
+    return fileInfos.find(f => f.index === fileIndex);
   };
 
   if (loading && pages.length === 0) {
@@ -165,51 +172,54 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
 
       {mode === "file" ? (
         <Reorder.Group axis="y" values={files} onReorder={onReorder} className="space-y-3">
-          {files.map((file, index) => (
-            <Reorder.Item key={`${file.name}-${file.size}-${index}`} value={file}>
-              <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
-                <div className="text-slate-400">
-                  <GripVertical size={20} />
-                </div>
-                
-                <div className="w-12 h-16 bg-slate-50 border rounded flex items-center justify-center text-red-500 shadow-sm relative overflow-hidden">
-                  {getFileThumbnail(file, index) ? (
-                    <img 
-                      src={getFileThumbnail(file, index)} 
-                      alt="PDF preview" 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <FileText size={24} />
-                  )}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate text-slate-700">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(file.size / 1024 / 1024).toFixed(2)} MB
-                    {getFilePageCount(index) > 0 && (
-                      <span className="ml-2 text-primary font-medium">
-                        • {getFilePageCount(index)} page{getFilePageCount(index) !== 1 ? 's' : ''}
-                      </span>
+          {files.map((file, index) => {
+            const info = getFileInfo(index);
+            return (
+              <Reorder.Item key={`${file.name}-${file.size}-${index}`} value={file}>
+                <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
+                  <div className="text-slate-400">
+                    <GripVertical size={20} />
+                  </div>
+                  
+                  <div className="w-12 h-16 bg-slate-50 border rounded flex items-center justify-center shadow-sm relative overflow-hidden">
+                    {info?.thumbnail ? (
+                      <img 
+                        src={info.thumbnail} 
+                        alt="PDF preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <FileText size={24} className="text-red-500" />
                     )}
-                  </p>
-                </div>
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate text-slate-700">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {info && info.pageCount > 0 && (
+                        <span className="ml-2 text-primary font-medium">
+                          • {info.pageCount} page{info.pageCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </p>
+                  </div>
 
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(index);
-                  }}
-                  className="text-slate-400 hover:text-destructive hover:bg-red-50"
-                >
-                  <Trash2 size={18} />
-                </Button>
-              </div>
-            </Reorder.Item>
-          ))}
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(index);
+                    }}
+                    className="text-slate-400 hover:text-destructive hover:bg-red-50"
+                  >
+                    <Trash2 size={18} />
+                  </Button>
+                </div>
+              </Reorder.Item>
+            );
+          })}
         </Reorder.Group>
       ) : (
         <div className="bg-slate-100/50 p-6 rounded-2xl border-2 border-dashed border-slate-200">
