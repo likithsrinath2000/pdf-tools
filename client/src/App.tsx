@@ -9,6 +9,7 @@ import ToolPage from "@/pages/Tool";
 import About from "@/pages/About";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
+import Feedback from "@/pages/Feedback";
 
 function Router() {
   return (
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />
+      <Route path="/feedback" component={Feedback} />
       <Route path="/:id" component={ToolPage} />
       <Route component={NotFound} />
     </Switch>

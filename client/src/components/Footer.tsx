@@ -20,18 +20,18 @@ export function Footer() {
         
         <div className="flex flex-col md:flex-row gap-8 text-center md:text-left">
            <div>
-             <h4 className="font-bold mb-4">The Serious Stuff</h4>
+             <h4 className="font-bold mb-4">Company</h4>
              <ul className="space-y-2 text-sm text-muted-foreground">
-               <li><a href="#" className="hover:text-primary transition-colors">About Us</a></li>
-               <li><a href="#" className="hover:text-primary transition-colors">Feedback</a></li>
+               <li><a href="/about" className="hover:text-primary transition-colors">About Us</a></li>
+               <li><a href="/feedback" className="hover:text-primary transition-colors">Feedback</a></li>
              </ul>
            </div>
            
            <div>
-             <h4 className="font-bold mb-4">The Fun Stuff</h4>
+             <h4 className="font-bold mb-4">Legal</h4>
              <ul className="space-y-2 text-sm text-muted-foreground">
-               <li><a href="#" className="hover:text-primary transition-colors">How to survive Mondays</a></li>
-               <li><a href="#" className="hover:text-primary transition-colors">Coffee Donations</a></li>
+               <li><a href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</a></li>
+               <li><a href="/terms" className="hover:text-primary transition-colors">Terms of Service</a></li>
              </ul>
            </div>
         </div>
