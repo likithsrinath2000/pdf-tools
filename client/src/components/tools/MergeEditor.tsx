@@ -6,7 +6,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Use the bundled worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
   import.meta.url
@@ -39,6 +38,7 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [fileInfos, setFileInfos] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hoveredPage, setHoveredPage] = useState<PageInfo | null>(null);
   const processedFilesRef = useRef<string>("");
   const onPageOrderChangeRef = useRef(onPageOrderChange);
   onPageOrderChangeRef.current = onPageOrderChange;
@@ -46,7 +46,7 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
-    scale: number = 0.4
+    scale: number = 0.5
   ): Promise<string> => {
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
@@ -62,7 +62,7 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
       canvasContext: context,
       viewport: viewport,
     } as any).promise;
-    return canvas.toDataURL("image/jpeg", 0.8);
+    return canvas.toDataURL("image/jpeg", 0.85);
   }, []);
 
   useEffect(() => {
@@ -95,13 +95,11 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
             const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const pageCount = pdfDoc.numPages;
             
-            // Render first page thumbnail for file view
             const fileThumbnail = await renderPageToCanvas(pdfDoc, 1, 0.15);
             infos.push({ file, index: fIndex, pageCount, thumbnail: fileThumbnail });
             
-            // Render all page thumbnails for page view
             for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-              const pageThumbnail = await renderPageToCanvas(pdfDoc, pageNum, 0.3);
+              const pageThumbnail = await renderPageToCanvas(pdfDoc, pageNum, 0.5);
               allPages.push({
                 id: `${fileKey}-page-${pageNum}`,
                 fileIndex: fIndex,
@@ -148,157 +146,217 @@ export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: M
     }
   }, [pages, mode]);
 
-  const getFileInfo = (fileIndex: number) => {
-    return fileInfos.find(f => f.index === fileIndex);
+  const handleFileReorder = useCallback((newFileInfos: FileInfo[]) => {
+    setFileInfos(newFileInfos);
+    const reorderedFiles = newFileInfos.map(info => info.file);
+    onReorder(reorderedFiles);
+  }, [onReorder]);
+
+  const handleRemoveFile = useCallback((indexToRemove: number) => {
+    onRemove(indexToRemove);
+    processedFilesRef.current = "";
+  }, [onRemove]);
+
+  const getFileColor = (fileIndex: number) => {
+    const colors = [
+      "bg-blue-100 text-blue-700 border-blue-200",
+      "bg-green-100 text-green-700 border-green-200",
+      "bg-purple-100 text-purple-700 border-purple-200",
+      "bg-orange-100 text-orange-700 border-orange-200",
+      "bg-pink-100 text-pink-700 border-pink-200",
+      "bg-cyan-100 text-cyan-700 border-cyan-200",
+    ];
+    return colors[fileIndex % colors.length];
   };
 
-  if (loading && pages.length === 0) {
-    return (
-      <div className="w-full max-w-4xl flex flex-col items-center justify-center py-16 space-y-4">
-        <Loader2 className="w-12 h-12 animate-spin text-primary" />
-        <p className="text-muted-foreground">Reading PDF pages...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full max-w-4xl">
-      <div className="flex items-center justify-between mb-8 bg-slate-50 p-4 rounded-xl border">
-        <div className="space-y-1">
-           <h3 className="font-semibold text-slate-900">
-             {mode === "file" ? "File Mode" : "Page Mode"}
-           </h3>
-           <p className="text-sm text-muted-foreground">
-             {mode === "file" ? "Reorder entire PDF files" : "Reorder individual pages across files"}
-           </p>
+    <div className="w-full max-w-6xl space-y-6">
+      <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border">
+        <div>
+          <h3 className="font-semibold text-slate-900">Merge Mode</h3>
+          <p className="text-sm text-muted-foreground">
+            {mode === "file" ? "Reorder entire PDFs" : `Reorder individual pages (${pages.length} total)`}
+          </p>
         </div>
-        <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-lg border shadow-sm">
-          <Label htmlFor="mode-toggle" className={`cursor-pointer ${mode === "file" ? "font-bold text-primary" : "text-muted-foreground"}`}>Files</Label>
-          <Switch 
-            id="mode-toggle" 
+        <div className="flex items-center gap-3">
+          <Label htmlFor="merge-mode" className={mode === "file" ? "font-medium" : "text-muted-foreground"}>
+            By File
+          </Label>
+          <Switch
+            id="merge-mode"
             checked={mode === "page"}
             onCheckedChange={(checked) => setMode(checked ? "page" : "file")}
           />
-          <Label htmlFor="mode-toggle" className={`cursor-pointer ${mode === "page" ? "font-bold text-primary" : "text-muted-foreground"}`}>Pages</Label>
+          <Label htmlFor="merge-mode" className={mode === "page" ? "font-medium" : "text-muted-foreground"}>
+            By Page
+          </Label>
         </div>
       </div>
 
       {mode === "file" ? (
-        <Reorder.Group axis="y" values={files} onReorder={onReorder} className="space-y-3">
-          {files.map((file, index) => {
-            const info = getFileInfo(index);
-            return (
-              <Reorder.Item key={`${file.name}-${file.size}-${index}`} value={file}>
-                <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
-                  <div className="text-slate-400">
-                    <GripVertical size={20} />
-                  </div>
-                  
-                  <div className="w-12 h-16 bg-slate-50 border rounded flex items-center justify-center shadow-sm relative overflow-hidden">
-                    {info?.thumbnail ? (
-                      <img 
-                        src={info.thumbnail} 
-                        alt="PDF preview" 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <FileText size={24} className="text-red-500" />
-                    )}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate text-slate-700">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
-                      {info && info.pageCount > 0 && (
-                        <span className="ml-2 text-primary font-medium">
-                          • {info.pageCount} page{info.pageCount !== 1 ? 's' : ''}
-                        </span>
+        <div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8 gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="text-muted-foreground">Processing PDFs...</span>
+            </div>
+          ) : (
+            <Reorder.Group 
+              axis="y" 
+              values={fileInfos} 
+              onReorder={handleFileReorder} 
+              className="space-y-2"
+            >
+              {fileInfos.map((info) => (
+                <Reorder.Item
+                  key={`file-${info.index}-${info.file.name}`}
+                  value={info}
+                  className="cursor-grab active:cursor-grabbing"
+                >
+                  <div className="flex items-center gap-3 bg-white border-2 border-slate-200 rounded-lg p-3 hover:border-primary hover:shadow-md transition-all">
+                    <GripVertical size={20} className="text-slate-300 shrink-0" />
+                    
+                    <div className="w-12 h-16 bg-slate-50 rounded border overflow-hidden flex items-center justify-center shrink-0">
+                      {info.thumbnail ? (
+                        <img 
+                          src={info.thumbnail} 
+                          alt={info.file.name}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <FileText size={24} className="text-slate-300" />
                       )}
-                    </p>
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-slate-700 truncate">{info.file.name}</div>
+                      <div className="text-sm text-slate-400">{info.pageCount} page{info.pageCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:bg-red-50 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFile(info.index);
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
                   </div>
-
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemove(index);
-                    }}
-                    className="text-slate-400 hover:text-destructive hover:bg-red-50"
-                  >
-                    <Trash2 size={18} />
-                  </Button>
-                </div>
-              </Reorder.Item>
-            );
-          })}
-        </Reorder.Group>
+                </Reorder.Item>
+              ))}
+            </Reorder.Group>
+          )}
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            Drag files to reorder. Pages within each file maintain their order.
+          </p>
+        </div>
       ) : (
-        <div className="bg-slate-100/50 p-6 rounded-2xl border-2 border-dashed border-slate-200">
+        <div>
           {loading ? (
             <div className="flex items-center justify-center py-8 gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
               <span className="text-muted-foreground">Rendering page thumbnails...</span>
             </div>
           ) : (
-            <Reorder.Group 
-                axis="x" 
-                values={pages} 
-                onReorder={setPages} 
-                className="flex flex-wrap gap-4 justify-center"
-            >
-              {pages.map((page) => (
-                <Reorder.Item 
-                    key={page.id} 
-                    value={page}
-                    className="relative group cursor-grab active:cursor-grabbing"
+            <div className="flex gap-6">
+              <div className="flex-1 max-h-[500px] overflow-y-auto pr-2">
+                <Reorder.Group 
+                  axis="y" 
+                  values={pages} 
+                  onReorder={setPages} 
+                  className="space-y-2"
                 >
-                   <div className="bg-white border-2 border-slate-200 rounded-lg p-3 hover:border-primary hover:shadow-lg transition-all w-[140px]">
-                      <div className="flex justify-center mb-2">
-                        <GripVertical size={16} className="text-slate-300" />
-                      </div>
-                      
-                      <div className="w-full aspect-[3/4] bg-slate-50 rounded border overflow-hidden flex items-center justify-center mb-3">
-                        {page.thumbnail ? (
-                          <img 
-                            src={page.thumbnail} 
-                            alt={`Page ${page.pageNumber}`}
-                            className="w-full h-full object-contain"
-                          />
-                        ) : (
-                          <FileText size={32} className="text-slate-300" />
-                        )}
-                      </div>
+                  {pages.map((page, index) => (
+                    <Reorder.Item 
+                      key={page.id} 
+                      value={page}
+                      className="cursor-grab active:cursor-grabbing"
+                      onMouseEnter={() => setHoveredPage(page)}
+                      onMouseLeave={() => setHoveredPage(null)}
+                    >
+                      <div className={`flex items-center gap-3 bg-white border-2 rounded-lg p-3 transition-all ${
+                        hoveredPage?.id === page.id ? "border-primary shadow-md bg-primary/5" : "border-slate-200 hover:border-slate-300"
+                      }`}>
+                        <GripVertical size={20} className="text-slate-300 shrink-0" />
+                        
+                        <div className="w-8 h-8 bg-slate-100 rounded flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">
+                          {index + 1}
+                        </div>
+                        
+                        <div className="w-10 h-14 bg-slate-50 rounded border overflow-hidden flex items-center justify-center shrink-0">
+                          {page.thumbnail ? (
+                            <img 
+                              src={page.thumbnail} 
+                              alt={`Page ${page.pageNumber}`}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <FileText size={16} className="text-slate-300" />
+                          )}
+                        </div>
 
-                      <div className="text-center text-sm font-medium text-slate-700 mb-1">
-                        Page {page.pageNumber}
-                      </div>
-                      <div className="text-center text-xs text-slate-400 truncate px-1">
-                        {page.fileName}
-                      </div>
-                      
-                      <div className="flex justify-center mt-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-slate-700">Page {page.pageNumber}</div>
+                          <div className={`text-xs px-2 py-0.5 rounded-full inline-block ${getFileColor(page.fileIndex)}`}>
+                            {page.fileName.length > 25 ? page.fileName.substring(0, 25) + '...' : page.fileName}
+                          </div>
+                        </div>
+
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-red-500 hover:bg-red-50"
+                          className="h-8 w-8 text-red-500 hover:bg-red-50 shrink-0"
                           onClick={(e) => {
-                             e.stopPropagation();
-                             setPages(pages.filter(p => p.id !== page.id));
+                            e.stopPropagation();
+                            setPages(prev => prev.filter(p => p.id !== page.id));
                           }}
                           title="Remove Page"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={16} />
                         </Button>
                       </div>
-                   </div>
-                </Reorder.Item>
-              ))}
-            </Reorder.Group>
+                    </Reorder.Item>
+                  ))}
+                </Reorder.Group>
+              </div>
+
+              <div className="w-[300px] shrink-0 sticky top-0">
+                <div className="bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 p-4 h-[400px] flex flex-col items-center justify-center">
+                  {hoveredPage ? (
+                    <>
+                      <div className="w-full max-h-[300px] bg-white rounded-lg shadow-lg border overflow-hidden flex items-center justify-center">
+                        {hoveredPage.thumbnail ? (
+                          <img 
+                            src={hoveredPage.thumbnail} 
+                            alt={`Page ${hoveredPage.pageNumber}`}
+                            className="max-w-full max-h-[300px] object-contain"
+                          />
+                        ) : (
+                          <FileText size={64} className="text-slate-300" />
+                        )}
+                      </div>
+                      <div className="mt-3 text-center">
+                        <div className="font-semibold text-slate-700">Page {hoveredPage.pageNumber}</div>
+                        <div className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${getFileColor(hoveredPage.fileIndex)}`}>
+                          {hoveredPage.fileName}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-slate-400">
+                      <FileText size={48} className="mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">Hover over a page to preview</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            Drag pages to reorder them individually.
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            Drag rows to reorder pages from different files. Total: {pages.length} pages
           </p>
         </div>
       )}

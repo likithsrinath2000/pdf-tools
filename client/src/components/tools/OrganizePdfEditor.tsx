@@ -24,13 +24,14 @@ interface OrganizePdfEditorProps {
 export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorProps) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hoveredPage, setHoveredPage] = useState<PageInfo | null>(null);
   const onOptionsChangeRef = useRef(onOptionsChange);
   onOptionsChangeRef.current = onOptionsChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
-    scale: number = 0.3
+    scale: number = 0.5
   ): Promise<string> => {
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
@@ -40,7 +41,7 @@ export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorP
     canvas.height = viewport.height;
     canvas.width = viewport.width;
     await page.render({ canvasContext: context, viewport } as any).promise;
-    return canvas.toDataURL("image/jpeg", 0.8);
+    return canvas.toDataURL("image/jpeg", 0.85);
   }, []);
 
   useEffect(() => {
@@ -108,86 +109,133 @@ export function OrganizePdfEditor({ files, onOptionsChange }: OrganizePdfEditorP
   }
 
   return (
-    <div className="w-full max-w-5xl">
+    <div className="w-full max-w-6xl">
       <div className="bg-slate-50 p-4 rounded-xl border mb-6">
-        <h3 className="font-semibold text-slate-900 mb-2">Organize Your Pages</h3>
+        <h3 className="font-semibold text-slate-900 mb-2">Organize Your Pages ({pages.length} pages)</h3>
         <p className="text-sm text-muted-foreground">
-          Drag to reorder, rotate, or remove pages. Your changes will be applied when you process.
+          Drag rows to reorder. Hover over a row to see a large preview on the right.
         </p>
       </div>
 
-      <Reorder.Group 
-        axis="x" 
-        values={pages} 
-        onReorder={setPages} 
-        className="flex flex-wrap gap-4 justify-center"
-      >
-        {pages.map((page) => (
-          <Reorder.Item 
-            key={page.id} 
-            value={page}
-            className="relative group cursor-grab active:cursor-grabbing"
+      <div className="flex gap-6">
+        <div className="flex-1 max-h-[500px] overflow-y-auto pr-2">
+          <Reorder.Group 
+            axis="y" 
+            values={pages} 
+            onReorder={setPages} 
+            className="space-y-2"
           >
-            <div className="bg-white border-2 border-slate-200 rounded-lg p-3 hover:border-primary hover:shadow-lg transition-all w-[140px]">
-              <div className="flex justify-center mb-2">
-                <GripVertical size={16} className="text-slate-300" />
-              </div>
-              
-              <div 
-                className="w-full aspect-[3/4] bg-slate-50 rounded border overflow-hidden flex items-center justify-center mb-3"
-                style={{ transform: `rotate(${page.rotation}deg)` }}
+            {pages.map((page, index) => (
+              <Reorder.Item 
+                key={page.id} 
+                value={page}
+                className="cursor-grab active:cursor-grabbing"
+                onMouseEnter={() => setHoveredPage(page)}
+                onMouseLeave={() => setHoveredPage(null)}
               >
-                {page.thumbnail ? (
-                  <img 
-                    src={page.thumbnail} 
-                    alt={`Page ${page.pageNumber}`}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <FileText size={32} className="text-slate-300" />
-                )}
-              </div>
+                <div className={`flex items-center gap-3 bg-white border-2 rounded-lg p-3 transition-all ${
+                  hoveredPage?.id === page.id ? "border-primary shadow-md bg-primary/5" : "border-slate-200 hover:border-slate-300"
+                }`}>
+                  <GripVertical size={20} className="text-slate-300 shrink-0" />
+                  
+                  <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center text-lg font-bold text-slate-500 shrink-0">
+                    {index + 1}
+                  </div>
+                  
+                  <div 
+                    className="w-12 h-16 bg-slate-50 rounded border overflow-hidden flex items-center justify-center shrink-0"
+                    style={{ transform: `rotate(${page.rotation}deg)` }}
+                  >
+                    {page.thumbnail ? (
+                      <img 
+                        src={page.thumbnail} 
+                        alt={`Page ${page.pageNumber}`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <FileText size={20} className="text-slate-300" />
+                    )}
+                  </div>
 
-              <div className="text-center text-sm font-medium text-slate-700 mb-2">
-                Page {page.pageNumber}
-              </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-700">Page {page.pageNumber}</div>
+                    <div className="text-xs text-slate-400">
+                      {page.rotation !== 0 ? `Rotated ${page.rotation}°` : "Original orientation"}
+                    </div>
+                  </div>
 
-              <div className="flex justify-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); rotatePage(page.id, 'ccw'); }}
-                  title="Rotate Left"
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); rotatePage(page.id, 'ccw'); }}
+                      title="Rotate Left"
+                    >
+                      <RotateCcw size={16} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); rotatePage(page.id, 'cw'); }}
+                      title="Rotate Right"
+                    >
+                      <RotateCw size={16} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:bg-red-50"
+                      onClick={(e) => { e.stopPropagation(); removePage(page.id); }}
+                      title="Remove Page"
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  </div>
+                </div>
+              </Reorder.Item>
+            ))}
+          </Reorder.Group>
+        </div>
+
+        <div className="w-[300px] shrink-0 sticky top-0">
+          <div className="bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 p-4 h-[400px] flex flex-col items-center justify-center">
+            {hoveredPage ? (
+              <>
+                <div 
+                  className="w-full max-h-[320px] bg-white rounded-lg shadow-lg border overflow-hidden flex items-center justify-center"
+                  style={{ transform: `rotate(${hoveredPage.rotation}deg)` }}
                 >
-                  <RotateCcw size={14} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={(e) => { e.stopPropagation(); rotatePage(page.id, 'cw'); }}
-                  title="Rotate Right"
-                >
-                  <RotateCw size={14} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7 text-red-500 hover:bg-red-50"
-                  onClick={(e) => { e.stopPropagation(); removePage(page.id); }}
-                  title="Remove Page"
-                >
-                  <Trash2 size={14} />
-                </Button>
+                  {hoveredPage.thumbnail ? (
+                    <img 
+                      src={hoveredPage.thumbnail} 
+                      alt={`Page ${hoveredPage.pageNumber}`}
+                      className="max-w-full max-h-[320px] object-contain"
+                    />
+                  ) : (
+                    <FileText size={64} className="text-slate-300" />
+                  )}
+                </div>
+                <div className="mt-3 text-center">
+                  <div className="font-semibold text-slate-700">Page {hoveredPage.pageNumber}</div>
+                  <div className="text-xs text-slate-400">
+                    {hoveredPage.rotation !== 0 ? `Rotated ${hoveredPage.rotation}°` : "Original"}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-slate-400">
+                <FileText size={48} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Hover over a page to preview</p>
               </div>
-            </div>
-          </Reorder.Item>
-        ))}
-      </Reorder.Group>
+            )}
+          </div>
+        </div>
+      </div>
 
       <p className="text-center text-sm text-muted-foreground mt-6">
-        🎨 Drag pages to reorder, click buttons to rotate or remove
+        Drag rows to reorder pages. Total: {pages.length} pages
       </p>
     </div>
   );
