@@ -2,7 +2,7 @@ import {
   FileInput, Scissors, Minimize2, FileText, FileType, Table, Image, 
   FileImage, Layers, Edit3, Trash, RotateCw, Lock, Unlock, 
   FileCheck, Globe, Stamp, PenTool, Crop, Shield, Eraser, Move,
-  FileCode, FilePlus
+  FileCode, FilePlus, FileSpreadsheet, Presentation
 } from "lucide-react";
 
 export interface Tool {
@@ -281,6 +281,39 @@ export const TOOLS: Tool[] = [
     color: "bg-purple-500",
     accept: "",
     action: "Create PDF",
+    category: "edit",
+    maxFiles: 0
+  },
+  {
+    id: "create-word",
+    title: "Create Word Doc",
+    description: "Create Word documents (.docx) from scratch. Type your content and download as a real Word file!",
+    icon: FileText,
+    color: "bg-blue-600",
+    accept: "",
+    action: "Create DOCX",
+    category: "edit",
+    maxFiles: 0
+  },
+  {
+    id: "create-excel",
+    title: "Create Excel",
+    description: "Build spreadsheets (.xlsx) with rows and columns. Perfect for data, budgets, and lists!",
+    icon: FileSpreadsheet,
+    color: "bg-green-600",
+    accept: "",
+    action: "Create XLSX",
+    category: "edit",
+    maxFiles: 0
+  },
+  {
+    id: "create-powerpoint",
+    title: "Create PowerPoint",
+    description: "Design presentations (.pptx) with slides. Add titles and content for each slide!",
+    icon: Presentation,
+    color: "bg-orange-500",
+    accept: "",
+    action: "Create PPTX",
     category: "edit",
     maxFiles: 0
   },

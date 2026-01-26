@@ -98,7 +98,7 @@ export async function registerRoutes(
       const files = req.files as Express.Multer.File[];
       const { toolId, options } = req.body;
 
-      const noFileTools = ["create-document", "html-to-pdf"];
+      const noFileTools = ["create-document", "html-to-pdf", "create-word", "create-excel", "create-powerpoint"];
       if ((!files || files.length === 0) && !noFileTools.includes(toolId)) {
         return res.status(400).json({ error: "No files uploaded" });
       }
@@ -336,6 +336,19 @@ async function processJobAsync(
         await officeService.htmlToPDF(options.content || '<p>Empty document</p>', outputPath);
         break;
 
+      case "create-word":
+        const wordContent = officeService['extractTextFromHtml'](options.wordContent || 'Empty document');
+        await officeService.createWordDocument(wordContent, outputPath);
+        break;
+
+      case "create-excel":
+        await officeService.createExcelDocument(options.excelData || { headers: [], rows: [] }, outputPath);
+        break;
+
+      case "create-powerpoint":
+        await officeService.createPowerPointDocument(options.slides || [{ title: 'Slide 1', content: 'Content' }], outputPath);
+        break;
+
       case "protect-pdf":
         await pdfService.protectPDF(inputFiles[0].path, outputPath, options.password || 'password123');
         break;
@@ -537,6 +550,9 @@ function getOutputExtension(toolId: string): string {
     "excel-to-pdf": ".pdf",
     "html-to-pdf": ".pdf",
     "create-document": ".pdf",
+    "create-word": ".docx",
+    "create-excel": ".xlsx",
+    "create-powerpoint": ".pptx",
     "pdf-to-word": ".docx",
     "pdf-to-powerpoint": ".pptx",
     "pdf-to-excel": ".xlsx",

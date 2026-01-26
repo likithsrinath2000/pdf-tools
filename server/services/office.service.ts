@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
+import officegen from 'officegen';
+import { createWriteStream } from 'fs';
 
 const execPromise = promisify(exec);
 
@@ -291,6 +293,96 @@ export class OfficeService {
     }
     
     return lines;
+  }
+
+  async createWordDocument(content: string, outputPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const docx = officegen('docx');
+      
+      docx.on('error', (err: Error) => reject(err));
+      
+      const paragraphs = content.split('\n\n');
+      for (const para of paragraphs) {
+        if (para.trim()) {
+          const pObj = docx.createP();
+          pObj.addText(para.trim());
+        }
+      }
+      
+      const out = createWriteStream(outputPath);
+      out.on('error', reject);
+      out.on('close', resolve);
+      
+      docx.generate(out);
+    });
+  }
+
+  async createExcelDocument(data: { headers: string[], rows: string[][] }, outputPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xlsx = officegen('xlsx');
+      
+      xlsx.on('error', (err: Error) => reject(err));
+      
+      const sheet = xlsx.makeNewSheet();
+      sheet.name = 'Sheet1';
+      
+      if (data.headers && data.headers.length > 0) {
+        data.headers.forEach((header, colIndex) => {
+          sheet.setCell(String.fromCharCode(65 + colIndex) + '1', header);
+        });
+      }
+      
+      if (data.rows && data.rows.length > 0) {
+        data.rows.forEach((row, rowIndex) => {
+          row.forEach((cell, colIndex) => {
+            sheet.setCell(String.fromCharCode(65 + colIndex) + (rowIndex + 2), cell);
+          });
+        });
+      }
+      
+      const out = createWriteStream(outputPath);
+      out.on('error', reject);
+      out.on('close', resolve);
+      
+      xlsx.generate(out);
+    });
+  }
+
+  async createPowerPointDocument(slides: { title: string, content: string }[], outputPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const pptx = officegen('pptx');
+      
+      pptx.on('error', (err: Error) => reject(err));
+      
+      for (const slideData of slides) {
+        const slide = pptx.makeNewSlide();
+        
+        slide.addText(slideData.title, {
+          x: 0.5,
+          y: 0.5,
+          cx: 9,
+          cy: 1,
+          font_size: 36,
+          bold: true,
+          color: '000000'
+        });
+        
+        slide.addText(slideData.content, {
+          x: 0.5,
+          y: 1.8,
+          cx: 9,
+          cy: 5,
+          font_size: 18,
+          color: '333333'
+        });
+      }
+      
+      const out = createWriteStream(outputPath);
+      out.on('error', reject);
+      out.on('close', resolve);
+      
+      pptx.generate(out);
+    });
   }
 }
 

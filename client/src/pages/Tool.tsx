@@ -35,6 +35,9 @@ import { RotatePagesEditor } from "@/components/tools/RotatePagesEditor";
 import { HtmlToPdfEditor } from "@/components/tools/HtmlToPdfEditor";
 import { EditPdfEditor } from "@/components/tools/EditPdfEditor";
 import { DocumentEditor } from "@/components/tools/DocumentEditor";
+import { WordEditor } from "@/components/tools/WordEditor";
+import { ExcelEditor } from "@/components/tools/ExcelEditor";
+import { PowerPointEditor } from "@/components/tools/PowerPointEditor";
 
 type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
 
@@ -453,6 +456,59 @@ export default function ToolPage() {
                   size="lg" 
                   onClick={handleProcess}
                   disabled={!processingOptions.content}
+                  className={cn("rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", tool.color)}
+                >
+                  {tool.action} <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {stage === "upload" && tool.id === "create-word" && (
+            <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
+              <WordEditor 
+                onContentChange={(content) => setProcessingOptions({ ...processingOptions, wordContent: content })}
+              />
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
+                <Button 
+                  size="lg" 
+                  onClick={handleProcess}
+                  disabled={!processingOptions.wordContent}
+                  className={cn("rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", tool.color)}
+                >
+                  {tool.action} <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {stage === "upload" && tool.id === "create-excel" && (
+            <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
+              <ExcelEditor 
+                onDataChange={(data) => setProcessingOptions({ ...processingOptions, excelData: data })}
+              />
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
+                <Button 
+                  size="lg" 
+                  onClick={handleProcess}
+                  className={cn("rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", tool.color)}
+                >
+                  {tool.action} <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {stage === "upload" && tool.id === "create-powerpoint" && (
+            <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
+              <PowerPointEditor 
+                onSlidesChange={(slides) => setProcessingOptions({ ...processingOptions, slides })}
+              />
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
+                <Button 
+                  size="lg" 
+                  onClick={handleProcess}
+                  disabled={!processingOptions.slides || processingOptions.slides.length === 0}
                   className={cn("rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", tool.color)}
                 >
                   {tool.action} <ArrowRight className="ml-2 h-5 w-5" />
