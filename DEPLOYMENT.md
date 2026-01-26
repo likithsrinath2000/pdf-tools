@@ -1,5 +1,87 @@
 # PDFTools Deployment Guide
 
+> Your PDFs won't manipulate themselves... or will they? 🤔
+
+This guide covers both **local development** and **Azure VM deployment** for production use with support for 5-10+ concurrent users.
+
+## Table of Contents
+
+- [Local Development](#local-development)
+- [Production Features](#production-features)
+- [Azure VM Deployment](#azure-vm-deployment)
+
+---
+
+## Local Development
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd pdftools
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+export DATABASE_URL="postgresql://user:pass@localhost:5432/pdftools"
+
+# Push database schema
+npm run db:push
+
+# Start development server
+npm run dev
+```
+
+The app will be available at `http://localhost:5000`
+
+### Building for Production
+
+```bash
+# Build the application
+npm run build
+
+# Start production server
+NODE_ENV=production npm start
+```
+
+---
+
+## Production Features
+
+### Log Rotation
+
+PDFTools uses `winston-daily-rotate-file` for automatic log management:
+
+- **Combined logs**: `logs/combined-YYYY-MM-DD.log` (7-day retention)
+- **Error logs**: `logs/error-YYYY-MM-DD.log` (14-day retention)
+- **Compressed archives**: Old logs are gzipped automatically
+- **Max file size**: 50MB per log file
+
+### Automatic File Cleanup
+
+Uploaded and processed files are automatically deleted after 24 hours:
+
+- **Configurable via**: `FILE_MAX_AGE_HOURS` environment variable
+- **Cleanup interval**: Every 60 minutes (configurable via `CLEANUP_INTERVAL_MINUTES`)
+- **Empty directories** are removed automatically
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NODE_ENV` | Environment mode | development |
+| `PORT` | Server port | 5000 |
+| `DATABASE_URL` | PostgreSQL connection | Required |
+| `UPLOADS_DIR` | File upload directory | ./uploads |
+| `LOGS_DIR` | Log files directory | ./logs |
+| `FILE_MAX_AGE_HOURS` | Hours before file deletion | 24 |
+| `CLEANUP_INTERVAL_MINUTES` | Cleanup check interval | 60 |
+| `LOG_LEVEL` | Logging verbosity | info |
+
+---
+
 ## Azure VM Deployment
 
 This guide will help you deploy PDFTools to an Azure VM for production use with support for multiple concurrent users.

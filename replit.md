@@ -35,9 +35,11 @@ Preferred communication style: Simple, everyday language.
 - **Office Conversion**: LibreOffice (headless) for Word/Excel/PowerPoint to PDF conversion
 
 ### Monitoring & Observability
-- **Logging**: Winston logger with file and console transports
+- **Logging**: Winston logger with daily rotating files (winston-daily-rotate-file)
+- **Log Rotation**: 7-day retention for combined logs, 14-day for errors, auto-compressed
 - **Metrics**: Prometheus-compatible metrics via prom-client (request duration, job counts, file sizes)
 - **Health Check**: `/api/health` endpoint for infrastructure monitoring
+- **Auto-Cleanup**: CleanupService automatically deletes files older than 24 hours
 
 ### Build & Deployment
 - **Development**: Vite dev server with HMR, tsx for backend
