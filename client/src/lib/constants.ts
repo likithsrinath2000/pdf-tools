@@ -14,6 +14,7 @@ export interface Tool {
   accept: string;
   action: string;
   category: "organize" | "optimize" | "convert-to-pdf" | "convert-from-pdf" | "security" | "edit" | "image-tools";
+  maxFiles?: number;
 }
 
 export const TOOLS: Tool[] = [
@@ -88,7 +89,8 @@ export const TOOLS: Tool[] = [
     color: "bg-green-500",
     accept: ".pdf",
     action: "Compress PDF",
-    category: "optimize"
+    category: "optimize",
+    maxFiles: 1
   },
   {
     id: "repair-pdf",
@@ -98,7 +100,8 @@ export const TOOLS: Tool[] = [
     color: "bg-green-500",
     accept: ".pdf",
     action: "Repair PDF",
-    category: "optimize"
+    category: "optimize",
+    maxFiles: 1
   },
 
   // Convert to PDF
@@ -214,7 +217,8 @@ export const TOOLS: Tool[] = [
     color: "bg-purple-500",
     accept: ".pdf",
     action: "Rotate PDF",
-    category: "edit"
+    category: "edit",
+    maxFiles: 1
   },
   {
     id: "add-page-numbers",
@@ -224,7 +228,8 @@ export const TOOLS: Tool[] = [
     color: "bg-purple-500",
     accept: ".pdf",
     action: "Add Numbers",
-    category: "edit"
+    category: "edit",
+    maxFiles: 1
   },
   {
     id: "add-watermark",
@@ -234,7 +239,8 @@ export const TOOLS: Tool[] = [
     color: "bg-purple-500",
     accept: ".pdf",
     action: "Add Watermark",
-    category: "edit"
+    category: "edit",
+    maxFiles: 1
   },
   {
     id: "edit-pdf",
@@ -244,7 +250,8 @@ export const TOOLS: Tool[] = [
     color: "bg-purple-500",
     accept: ".pdf",
     action: "Edit PDF",
-    category: "edit"
+    category: "edit",
+    maxFiles: 1
   },
 
   // Security
@@ -256,7 +263,8 @@ export const TOOLS: Tool[] = [
     color: "bg-slate-700",
     accept: ".pdf",
     action: "Unlock PDF",
-    category: "security"
+    category: "security",
+    maxFiles: 1
   },
   {
     id: "protect-pdf",
@@ -266,7 +274,8 @@ export const TOOLS: Tool[] = [
     color: "bg-slate-700",
     accept: ".pdf",
     action: "Protect PDF",
-    category: "security"
+    category: "security",
+    maxFiles: 1
   },
   {
     id: "sign-pdf",
@@ -276,7 +285,8 @@ export const TOOLS: Tool[] = [
     color: "bg-slate-700",
     accept: ".pdf",
     action: "Sign PDF",
-    category: "security"
+    category: "security",
+    maxFiles: 1
   },
 
   // Image Tools
@@ -298,7 +308,8 @@ export const TOOLS: Tool[] = [
     color: "bg-blue-600",
     accept: ".jpg,.jpeg,.png,.gif",
     action: "Crop Image",
-    category: "image-tools"
+    category: "image-tools",
+    maxFiles: 1
   },
   {
     id: "convert-image",
@@ -308,7 +319,8 @@ export const TOOLS: Tool[] = [
     color: "bg-blue-600",
     accept: ".png,.gif,.tif,.psd,.svg,.webp",
     action: "Convert to JPG",
-    category: "image-tools"
+    category: "image-tools",
+    maxFiles: 1
   },
   {
     id: "resize-image",
@@ -318,7 +330,8 @@ export const TOOLS: Tool[] = [
     color: "bg-blue-600",
     accept: ".jpg,.jpeg,.png,.svg,.gif",
     action: "Resize Image",
-    category: "image-tools"
+    category: "image-tools",
+    maxFiles: 1
   },
   {
     id: "rotate-image",
@@ -328,6 +341,7 @@ export const TOOLS: Tool[] = [
     color: "bg-blue-600",
     accept: ".jpg,.jpeg,.png,.gif",
     action: "Rotate Image",
-    category: "image-tools"
+    category: "image-tools",
+    maxFiles: 1
   }
 ];

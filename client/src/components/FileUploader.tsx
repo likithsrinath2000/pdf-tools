@@ -8,14 +8,16 @@ interface FileUploaderProps {
   onFilesSelected: (files: File[]) => void;
   accept: string;
   className?: string;
+  maxFiles?: number;
 }
 
-export function FileUploader({ onFilesSelected, accept, className }: FileUploaderProps) {
+export function FileUploader({ onFilesSelected, accept, className, maxFiles }: FileUploaderProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
-      onFilesSelected(acceptedFiles);
+      const filesToAdd = maxFiles ? acceptedFiles.slice(0, maxFiles) : acceptedFiles;
+      onFilesSelected(filesToAdd);
     }
-  }, [onFilesSelected]);
+  }, [onFilesSelected, maxFiles]);
 
   // Parse accept string to dropzone format
   // simplistic parsing: ".pdf" -> { 'application/pdf': ['.pdf'] }
@@ -32,7 +34,8 @@ export function FileUploader({ onFilesSelected, accept, className }: FileUploade
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: acceptMap
+    accept: acceptMap,
+    maxFiles: maxFiles
   });
 
   const isImage = Object.keys(acceptMap).some(k => k.startsWith('image/'));

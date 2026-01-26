@@ -175,16 +175,46 @@ export class PDFService {
     }
   }
 
+  async isPDFEncrypted(inputPath: string): Promise<boolean> {
+    try {
+      const pdfBytes = await fs.readFile(inputPath);
+      await PDFDocument.load(pdfBytes);
+      return false;
+    } catch (error: any) {
+      if (error.message && error.message.includes('encrypted')) {
+        return true;
+      }
+      const { stdout } = await execPromise(`qpdf --show-encryption "${inputPath}" 2>&1 || true`);
+      return stdout.toLowerCase().includes('encrypted') || stdout.toLowerCase().includes('password');
+    }
+  }
+
   async unlockPDF(inputPath: string, outputPath: string, password: string): Promise<void> {
+    const isEncrypted = await this.isPDFEncrypted(inputPath);
+    
+    if (!isEncrypted) {
+      throw new Error('ALREADY_UNPROTECTED: This PDF is already unprotected. No password removal needed!');
+    }
+
     try {
       await execPromise(
         `qpdf --password="${password}" --decrypt "${inputPath}" "${outputPath}"`
       );
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message && error.message.includes('invalid password')) {
+        throw new Error('INVALID_PASSWORD: The password you entered is incorrect. Please try again.');
+      }
       const pdfBytes = await fs.readFile(inputPath);
-      const pdf = await PDFDocument.load(pdfBytes);
-      const unlockedPdfBytes = await pdf.save();
-      await fs.writeFile(outputPath, unlockedPdfBytes);
+      try {
+        const pdf = await PDFDocument.load(pdfBytes, { password });
+        const unlockedPdfBytes = await pdf.save();
+        await fs.writeFile(outputPath, unlockedPdfBytes);
+      } catch (innerError: any) {
+        if (innerError.message && innerError.message.includes('password')) {
+          throw new Error('INVALID_PASSWORD: The password you entered is incorrect. Please try again.');
+        }
+        throw innerError;
+      }
     }
   }
 

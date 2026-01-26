@@ -54,7 +54,11 @@ export default function ToolPage() {
   }
 
   const handleFilesSelected = (selectedFiles: File[]) => {
-    setFiles(prev => [...prev, ...selectedFiles]);
+    if (tool?.maxFiles) {
+      setFiles(selectedFiles.slice(0, tool.maxFiles));
+    } else {
+      setFiles(prev => [...prev, ...selectedFiles]);
+    }
     setStage("files-selected");
   };
 
@@ -273,8 +277,14 @@ export default function ToolPage() {
             <div className="w-full animate-in fade-in zoom-in-95 duration-300">
               <FileUploader 
                 onFilesSelected={handleFilesSelected} 
-                accept={tool.accept} 
+                accept={tool.accept}
+                maxFiles={tool.maxFiles}
               />
+              {tool.maxFiles === 1 && (
+                <p className="text-center text-sm text-muted-foreground mt-2">
+                  This tool works with one file at a time
+                </p>
+              )}
             </div>
           )}
 
@@ -283,14 +293,16 @@ export default function ToolPage() {
                {renderContent()}
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
-                <Button 
-                  variant="outline" 
-                  size="lg" 
-                  onClick={() => setStage("upload")}
-                  className="rounded-full h-12 px-8"
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" /> Add more files
-                </Button>
+                {!tool.maxFiles && (
+                  <Button 
+                    variant="outline" 
+                    size="lg" 
+                    onClick={() => setStage("upload")}
+                    className="rounded-full h-12 px-8"
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" /> Add more files
+                  </Button>
+                )}
                 <Button 
                   size="lg" 
                   onClick={handleProcess}
