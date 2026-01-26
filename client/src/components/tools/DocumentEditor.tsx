@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Editor } from "@tinymce/tinymce-react";
 import { Button } from "@/components/ui/button";
 import { Loader2, FileDown, FileText, Maximize, Minimize } from "lucide-react";
@@ -13,12 +13,15 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
   const [content, setContent] = useState(initialContent);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const onOptionsChangeRef = useRef(onOptionsChange);
+
+  onOptionsChangeRef.current = onOptionsChange;
 
   useEffect(() => {
-    if (isReady) {
-      onOptionsChange({ content, format: "pdf" });
+    if (isReady && content) {
+      onOptionsChangeRef.current({ content, format: "pdf" });
     }
-  }, [content, isReady, onOptionsChange]);
+  }, [content, isReady]);
 
   const handleEditorChange = (newContent: string) => {
     setContent(newContent);
@@ -78,7 +81,7 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
           </div>
         )}
         <Editor
-          tinymceScriptSrc="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js"
+          tinymceScriptSrc="https://cdn.jsdelivr.net/npm/tinymce@6.8.2/tinymce.min.js"
           onInit={(_evt, editor) => {
             editorRef.current = editor;
             setIsReady(true);
@@ -111,10 +114,8 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
               "pagebreak",
               "nonbreaking",
               "visualchars",
-              "template",
               "save",
-              "directionality",
-              "importcss"
+              "directionality"
             ],
             toolbar:
               "undo redo | blocks fontfamily fontsize | " +
@@ -190,7 +191,6 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
               width: "100%",
               borderCollapse: "collapse"
             },
-            table_responsive_width: true,
             table_sizing_mode: "responsive",
             paste_data_images: true,
             automatic_uploads: false,
@@ -213,72 +213,6 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
                 input.click();
               }
             },
-            templates: [
-              {
-                title: "Basic Letter",
-                description: "A simple letter template",
-                content: `
-                  <p>[Your Name]<br>[Your Address]<br>[City, State ZIP]<br>[Date]</p>
-                  <p>&nbsp;</p>
-                  <p>[Recipient Name]<br>[Recipient Address]<br>[City, State ZIP]</p>
-                  <p>&nbsp;</p>
-                  <p>Dear [Recipient],</p>
-                  <p>[Letter body goes here]</p>
-                  <p>&nbsp;</p>
-                  <p>Sincerely,<br>[Your Name]</p>
-                `
-              },
-              {
-                title: "Meeting Notes",
-                description: "Template for meeting notes",
-                content: `
-                  <h1>Meeting Notes</h1>
-                  <p><strong>Date:</strong> [Date]<br><strong>Attendees:</strong> [Names]<br><strong>Location:</strong> [Location]</p>
-                  <h2>Agenda</h2>
-                  <ol>
-                    <li>Item 1</li>
-                    <li>Item 2</li>
-                    <li>Item 3</li>
-                  </ol>
-                  <h2>Discussion Points</h2>
-                  <p>[Notes here]</p>
-                  <h2>Action Items</h2>
-                  <ul>
-                    <li>[ ] Task 1 - Owner</li>
-                    <li>[ ] Task 2 - Owner</li>
-                  </ul>
-                  <h2>Next Meeting</h2>
-                  <p>[Date and time]</p>
-                `
-              },
-              {
-                title: "Project Proposal",
-                description: "A project proposal template",
-                content: `
-                  <h1>Project Proposal</h1>
-                  <h2>Executive Summary</h2>
-                  <p>[Brief overview of the project]</p>
-                  <h2>Objectives</h2>
-                  <ul>
-                    <li>Objective 1</li>
-                    <li>Objective 2</li>
-                    <li>Objective 3</li>
-                  </ul>
-                  <h2>Scope</h2>
-                  <p>[Define what is included and excluded]</p>
-                  <h2>Timeline</h2>
-                  <table>
-                    <tr><th>Phase</th><th>Duration</th><th>Deliverables</th></tr>
-                    <tr><td>Phase 1</td><td>2 weeks</td><td>Deliverable 1</td></tr>
-                    <tr><td>Phase 2</td><td>4 weeks</td><td>Deliverable 2</td></tr>
-                  </table>
-                  <h2>Budget</h2>
-                  <p>[Budget details]</p>
-                  <h2>Conclusion</h2>
-                  <p>[Summary and call to action]</p>
-                `
-              }
-            ],
             setup: (editor: any) => {
               editor.on("change", () => {
                 handleEditorChange(editor.getContent());

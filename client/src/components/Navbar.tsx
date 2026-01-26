@@ -25,6 +25,7 @@ import {
 import { TOOLS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Menu } from "lucide-react";
+import { LanguageSelector } from "./LanguageSelector";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -186,10 +187,14 @@ export function Navbar() {
              Compress PDF
            </Button>
         </Link>
+        <div className="ml-2 border-l pl-2">
+          <LanguageSelector />
+        </div>
       </div>
 
       {/* Mobile Menu */}
-      <div className="lg:hidden">
+      <div className="lg:hidden flex items-center gap-2">
+        <LanguageSelector />
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon">
