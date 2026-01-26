@@ -2,7 +2,7 @@ import {
   FileInput, Scissors, Minimize2, FileText, FileType, Table, Image, 
   FileImage, Layers, Edit3, Trash, RotateCw, Lock, Unlock, 
   FileCheck, Globe, Stamp, PenTool, Crop, Shield, Eraser, Move,
-  FileCode
+  FileCode, FilePlus
 } from "lucide-react";
 
 export interface Tool {
@@ -262,6 +262,17 @@ export const TOOLS: Tool[] = [
     action: "Edit PDF",
     category: "edit",
     maxFiles: 1
+  },
+  {
+    id: "create-document",
+    title: "Create Document",
+    description: "Create beautiful documents with our full-featured editor. Tables, images, formatting - it's like a word processor but cooler!",
+    icon: FilePlus,
+    color: "bg-purple-500",
+    accept: "",
+    action: "Create PDF",
+    category: "edit",
+    maxFiles: 0
   },
 
   // Security

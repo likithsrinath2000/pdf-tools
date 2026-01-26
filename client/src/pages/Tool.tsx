@@ -29,6 +29,7 @@ import { ExtractPagesEditor } from "@/components/tools/ExtractPagesEditor";
 import { RotatePagesEditor } from "@/components/tools/RotatePagesEditor";
 import { HtmlToPdfEditor } from "@/components/tools/HtmlToPdfEditor";
 import { EditPdfEditor } from "@/components/tools/EditPdfEditor";
+import { DocumentEditor } from "@/components/tools/DocumentEditor";
 
 type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
 
@@ -345,6 +346,14 @@ export default function ToolPage() {
       );
     }
 
+    if (tool.id === "create-document") {
+      return (
+        <DocumentEditor 
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
+      );
+    }
+
     // Default file list for other tools
     return (
        <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -375,7 +384,7 @@ export default function ToolPage() {
            stage === "files-selected" ? "max-w-7xl" : "max-w-4xl" 
         )}>
           
-          {stage === "upload" && (
+          {stage === "upload" && tool.id !== "create-document" && (
             <div className="w-full animate-in fade-in zoom-in-95 duration-300">
               <FileUploader 
                 onFilesSelected={handleFilesSelected} 
@@ -387,6 +396,24 @@ export default function ToolPage() {
                   This tool works with one file at a time
                 </p>
               )}
+            </div>
+          )}
+
+          {stage === "upload" && tool.id === "create-document" && (
+            <div className="w-full flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-300">
+              <DocumentEditor 
+                onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+              />
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
+                <Button 
+                  size="lg" 
+                  onClick={handleProcess}
+                  disabled={!processingOptions.content}
+                  className={cn("rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", tool.color)}
+                >
+                  {tool.action} <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
             </div>
           )}
 

@@ -98,16 +98,17 @@ export async function registerRoutes(
       const files = req.files as Express.Multer.File[];
       const { toolId, options } = req.body;
 
-      if (!files || files.length === 0) {
+      const noFileTools = ["create-document", "html-to-pdf"];
+      if ((!files || files.length === 0) && !noFileTools.includes(toolId)) {
         return res.status(400).json({ error: "No files uploaded" });
       }
 
-      const inputFiles = files.map(f => ({
+      const inputFiles = files ? files.map(f => ({
         path: f.path,
         originalName: f.originalname,
         size: f.size,
         mimetype: f.mimetype,
-      }));
+      })) : [];
 
       const parsedOptions = options ? JSON.parse(options) : {};
 
@@ -294,6 +295,10 @@ async function processJobAsync(
         await officeService.htmlToPDF(options.htmlContent || '', outputPath);
         break;
 
+      case "create-document":
+        await officeService.htmlToPDF(options.content || '<p>Empty document</p>', outputPath);
+        break;
+
       case "protect-pdf":
         await pdfService.protectPDF(inputFiles[0].path, outputPath, options.password || 'password123');
         break;
@@ -449,6 +454,7 @@ function getOutputExtension(toolId: string): string {
     "powerpoint-to-pdf": ".pdf",
     "excel-to-pdf": ".pdf",
     "html-to-pdf": ".pdf",
+    "create-document": ".pdf",
     "pdf-to-word": ".docx",
     "pdf-to-powerpoint": ".pptx",
     "pdf-to-excel": ".xlsx",
