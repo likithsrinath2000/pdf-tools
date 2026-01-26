@@ -182,6 +182,14 @@ sudo apt install -y \
   wkhtmltopdf
 ```
 
+> **Note about bundled dependencies**: The following are included via `npm install` and do NOT require separate installation:
+> - **TinyMCE Editor** - Bundled locally for offline document editing (GPL license)
+> - **React Image Crop** - Visual image cropping library
+> - **pdf-lib** - PDF manipulation library
+> - **Sharp** - Image processing library
+> 
+> All frontend dependencies are bundled into the production build during `npm run build`.
+
 ### Install Nginx
 
 ```bash
