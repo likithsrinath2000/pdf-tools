@@ -701,6 +701,44 @@ export class PDFService {
       }
     }
   }
+
+  async extractImages(inputPath: string, outputDir: string): Promise<string[]> {
+    try {
+      // Use pdfimages from poppler-utils to extract embedded images
+      const prefix = path.join(outputDir, 'image');
+      await execPromise(`pdfimages -all "${inputPath}" "${prefix}"`);
+      
+      const files = await fs.readdir(outputDir);
+      const imageFiles = files
+        .filter(f => f.startsWith('image') && (f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.ppm') || f.endsWith('.pbm') || f.endsWith('.tif') || f.endsWith('.tiff')))
+        .map(f => path.join(outputDir, f));
+      
+      // Convert any PPM/PBM files to PNG using sharp
+      const convertedFiles: string[] = [];
+      for (const file of imageFiles) {
+        const ext = path.extname(file).toLowerCase();
+        if (ext === '.ppm' || ext === '.pbm') {
+          const pngPath = file.replace(ext, '.png');
+          await sharp(file).png().toFile(pngPath);
+          await fs.unlink(file).catch(() => {});
+          convertedFiles.push(pngPath);
+        } else {
+          convertedFiles.push(file);
+        }
+      }
+      
+      if (convertedFiles.length === 0) {
+        throw new Error('No images found in the PDF. This document might be text-only or have images in an unsupported format.');
+      }
+      
+      return convertedFiles;
+    } catch (error: any) {
+      if (error.message && error.message.includes('No images found')) {
+        throw error;
+      }
+      throw new Error(`Failed to extract images: ${error.message || error}`);
+    }
+  }
 }
 
 export const pdfService = new PDFService();

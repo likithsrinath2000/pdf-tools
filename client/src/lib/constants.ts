@@ -208,6 +208,16 @@ export const TOOLS: Tool[] = [
     category: "convert-from-pdf"
   },
   {
+    id: "extract-images",
+    title: "Extract Images",
+    description: "Extract all embedded images from your PDF file. Like a treasure hunt, but with pixels!",
+    icon: FileImage,
+    color: "bg-purple-500",
+    accept: ".pdf",
+    action: "Extract Images",
+    category: "convert-from-pdf"
+  },
+  {
     id: "pdf-to-text",
     title: "PDF to Text",
     description: "Extract all text from your PDF documents into a plain text file. No more copy-paste gymnastics!",

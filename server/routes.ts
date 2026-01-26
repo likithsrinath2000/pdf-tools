@@ -395,6 +395,19 @@ async function processJobAsync(
         await pdfService.pdfToText(inputFiles[0].path, outputPath);
         break;
 
+      case "extract-images":
+        const extractedImages = await pdfService.extractImages(inputFiles[0].path, outputDir);
+        const JSZipExtract = (await import('jszip')).default;
+        const zipExtract = new JSZipExtract();
+        for (let i = 0; i < extractedImages.length; i++) {
+          const content = await fs.readFile(extractedImages[i]);
+          const ext = path.extname(extractedImages[i]);
+          zipExtract.file(`image_${i + 1}${ext}`, content);
+        }
+        const zipExtractBuffer = await zipExtract.generateAsync({ type: 'nodebuffer' });
+        await fs.writeFile(outputPath.replace('.pdf', '.zip'), zipExtractBuffer);
+        break;
+
       default:
         throw new Error(`Unknown tool: ${toolId}`);
     }
@@ -450,6 +463,7 @@ function getOutputExtension(toolId: string): string {
     "jpg-to-pdf": ".pdf",
     "scan-pdf": ".pdf",
     "pdf-to-jpg": ".zip",
+    "extract-images": ".zip",
     "word-to-pdf": ".pdf",
     "powerpoint-to-pdf": ".pdf",
     "excel-to-pdf": ".pdf",
