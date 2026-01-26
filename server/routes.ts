@@ -8,6 +8,8 @@ import { pdfService } from "./services/pdf.service";
 import { imageService } from "./services/image.service";
 import { officeService } from "./services/office.service";
 import { randomUUID } from "crypto";
+import { logger, logJobCreated, logJobCompleted, logJobFailed, logRequest } from "./logger";
+import { register, httpRequestDuration, jobsProcessed, activeJobs, fileSizeProcessed } from "./metrics";
 
 const upload = multer({ 
   dest: 'uploads/',
@@ -21,8 +23,40 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = (Date.now() - start) / 1000;
+      logRequest(req.method, req.path, duration, res.statusCode);
+      httpRequestDuration.observe(
+        { method: req.method, route: req.path, status_code: res.statusCode.toString() },
+        duration
+      );
+    });
+    next();
+  });
+
+  app.get("/api/health", async (req, res) => {
+    try {
+      const dbCheck = await storage.getRecentJobs(1);
+      res.json({ 
+        status: "ok", 
+        timestamp: new Date().toISOString(),
+        database: "connected",
+        uptime: process.uptime()
+      });
+    } catch (error) {
+      res.status(503).json({ 
+        status: "error", 
+        timestamp: new Date().toISOString(),
+        database: "disconnected"
+      });
+    }
+  });
+
+  app.get("/api/metrics", async (req, res) => {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
   });
 
   app.post("/api/jobs", upload.array('files', 20), async (req, res) => {
@@ -50,6 +84,12 @@ export async function registerRoutes(
         inputFiles: inputFiles as any,
         options: parsedOptions as any,
       });
+
+      logJobCreated(job.id, toolId, files.length);
+      activeJobs.inc();
+      
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      fileSizeProcessed.observe({ tool_id: toolId }, totalSize);
 
       processJobAsync(job.id, toolId, inputFiles, parsedOptions).catch(console.error);
 
@@ -119,8 +159,10 @@ async function processJobAsync(
   inputFiles: any[],
   options: any
 ): Promise<void> {
+  const startTime = Date.now();
   try {
     await storage.updateJobStatus(jobId, "processing", 10);
+    logger.info(`Processing job ${jobId} for tool ${toolId}`);
 
     const outputDir = "output_files";
     await fs.mkdir(outputDir, { recursive: true });
@@ -265,13 +307,22 @@ async function processJobAsync(
     for (const file of inputFiles) {
       await fs.unlink(file.path).catch(() => {});
     }
+
+    const duration = (Date.now() - startTime) / 1000;
+    logJobCompleted(jobId, toolId, duration);
+    jobsProcessed.inc({ tool_id: toolId, status: 'completed' });
+    activeJobs.dec();
   } catch (error: any) {
-    console.error(`Job ${jobId} failed:`, error);
+    logger.error(`Job ${jobId} failed:`, error);
+    logJobFailed(jobId, toolId, error.message);
     await storage.updateJobError(jobId, error.message);
     
     for (const file of inputFiles) {
       await fs.unlink(file.path).catch(() => {});
     }
+
+    jobsProcessed.inc({ tool_id: toolId, status: 'failed' });
+    activeJobs.dec();
   }
 }
 
