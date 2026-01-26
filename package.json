@@ -88,6 +88,7 @@
     "react-dom": "^19.2.0",
     "react-dropzone": "^14.3.8",
     "react-hook-form": "^7.66.0",
+    "react-image-crop": "^11.0.10",
     "react-image-file-resizer": "^0.4.8",
     "react-resizable-panels": "^2.1.9",
     "recharts": "^2.15.4",

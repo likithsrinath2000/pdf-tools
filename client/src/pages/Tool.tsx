@@ -23,6 +23,7 @@ import { RotateOptions } from "@/components/tools/RotateOptions";
 import { SignatureOptions } from "@/components/tools/SignatureOptions";
 import { ResizeOptions } from "@/components/tools/ResizeOptions";
 import { CropOptions } from "@/components/tools/CropOptions";
+import { VisualCropEditor } from "@/components/tools/VisualCropEditor";
 import { ExtractPagesOptions } from "@/components/tools/ExtractPagesOptions";
 import { OrganizePdfEditor } from "@/components/tools/OrganizePdfEditor";
 import { ExtractPagesEditor } from "@/components/tools/ExtractPagesEditor";
@@ -321,7 +322,8 @@ export default function ToolPage() {
       return (
         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
           <FileList files={files} onRemove={removeFile} />
-          <CropOptions 
+          <VisualCropEditor 
+            imageFile={files[0] || null}
             onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
           />
         </div>
