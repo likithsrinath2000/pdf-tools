@@ -41,6 +41,7 @@ interface EditPdfEditorProps {
 }
 
 type ToolType = "select" | "text" | "rectangle" | "circle" | "line" | "highlight" | "freehand" | "snip";
+type SnipShape = "rectangle" | "square" | "circle" | "freehand";
 
 interface Annotation {
   id: string;
@@ -106,9 +107,11 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [colorPickerTarget, setColorPickerTarget] = useState<"stroke" | "fill">("stroke");
   const [customColor, setCustomColor] = useState("#ff0000");
   const [clipboard, setClipboard] = useState<string | null>(null);
-  const [snipSelection, setSnipSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [snipSelection, setSnipSelection] = useState<{ x: number; y: number; width: number; height: number; shape: SnipShape; points?: {x: number; y: number}[] } | null>(null);
   const [isSnipping, setIsSnipping] = useState(false);
   const [snipStart, setSnipStart] = useState<{ x: number; y: number } | null>(null);
+  const [snipShape, setSnipShape] = useState<SnipShape>("rectangle");
+  const [snipPoints, setSnipPoints] = useState<{ x: number; y: number }[]>([]);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -249,6 +252,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       setIsSnipping(true);
       setSnipStart(pos);
       setSnipSelection(null);
+      if (snipShape === "freehand") {
+        setSnipPoints([pos]);
+      }
       return;
     }
 
@@ -348,11 +354,22 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     }
 
     if (isSnipping && snipStart) {
-      const x = Math.min(snipStart.x, pos.x);
-      const y = Math.min(snipStart.y, pos.y);
-      const width = Math.abs(pos.x - snipStart.x);
-      const height = Math.abs(pos.y - snipStart.y);
-      setSnipSelection({ x, y, width, height });
+      if (snipShape === "freehand") {
+        setSnipPoints(prev => [...prev, pos]);
+      } else {
+        let x = Math.min(snipStart.x, pos.x);
+        let y = Math.min(snipStart.y, pos.y);
+        let width = Math.abs(pos.x - snipStart.x);
+        let height = Math.abs(pos.y - snipStart.y);
+        
+        if (snipShape === "square" || snipShape === "circle") {
+          const size = Math.max(width, height);
+          width = size;
+          height = size;
+        }
+        
+        setSnipSelection({ x, y, width, height, shape: snipShape });
+      }
       return;
     }
 
@@ -362,7 +379,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   };
 
   const captureSnipSelection = () => {
-    if (!snipSelection || !imageRef.current || !pageImage) return;
+    if (!imageRef.current || !pageImage) return;
     
     const img = imageRef.current;
     const canvas = document.createElement("canvas");
@@ -371,18 +388,59 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     const scaleX = img.naturalWidth / img.clientWidth;
     const scaleY = img.naturalHeight / img.clientHeight;
     
-    const sx = snipSelection.x * scaleX;
-    const sy = snipSelection.y * scaleY;
-    const sw = snipSelection.width * scaleX;
-    const sh = snipSelection.height * scaleY;
+    if (snipShape === "freehand" && snipPoints.length > 2) {
+      const minX = Math.min(...snipPoints.map(p => p.x));
+      const maxX = Math.max(...snipPoints.map(p => p.x));
+      const minY = Math.min(...snipPoints.map(p => p.y));
+      const maxY = Math.max(...snipPoints.map(p => p.y));
+      const width = maxX - minX;
+      const height = maxY - minY;
+      
+      canvas.width = width * scaleX;
+      canvas.height = height * scaleY;
+      
+      ctx.save();
+      ctx.beginPath();
+      snipPoints.forEach((p, i) => {
+        const px = (p.x - minX) * scaleX;
+        const py = (p.y - minY) * scaleY;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.clip();
+      
+      ctx.drawImage(img, minX * scaleX, minY * scaleY, width * scaleX, height * scaleY, 0, 0, width * scaleX, height * scaleY);
+      ctx.restore();
+      
+      const imageData = canvas.toDataURL("image/png");
+      setClipboard(imageData);
+      setSnipPoints([]);
+    } else if (snipSelection) {
+      const sx = snipSelection.x * scaleX;
+      const sy = snipSelection.y * scaleY;
+      const sw = snipSelection.width * scaleX;
+      const sh = snipSelection.height * scaleY;
+      
+      canvas.width = sw;
+      canvas.height = sh;
+      
+      if (snipSelection.shape === "circle") {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(sw / 2, sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        ctx.restore();
+      } else {
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      }
+      
+      const imageData = canvas.toDataURL("image/png");
+      setClipboard(imageData);
+      setSnipSelection(null);
+    }
     
-    canvas.width = sw;
-    canvas.height = sh;
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-    
-    const imageData = canvas.toDataURL("image/png");
-    setClipboard(imageData);
-    setSnipSelection(null);
     setIsSnipping(false);
     setSnipStart(null);
   };
@@ -420,12 +478,26 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
 
     if (isSnipping && snipStart) {
       const pos = getRelativePosition(e);
-      const x = Math.min(snipStart.x, pos.x);
-      const y = Math.min(snipStart.y, pos.y);
-      const width = Math.abs(pos.x - snipStart.x);
-      const height = Math.abs(pos.y - snipStart.y);
-      if (width > 10 && height > 10) {
-        setSnipSelection({ x, y, width, height });
+      
+      if (snipShape === "freehand") {
+        if (snipPoints.length > 2) {
+          setSnipPoints(prev => [...prev, prev[0]]);
+        }
+      } else {
+        let x = Math.min(snipStart.x, pos.x);
+        let y = Math.min(snipStart.y, pos.y);
+        let width = Math.abs(pos.x - snipStart.x);
+        let height = Math.abs(pos.y - snipStart.y);
+        
+        if (snipShape === "square" || snipShape === "circle") {
+          const size = Math.max(width, height);
+          width = size;
+          height = size;
+        }
+        
+        if (width > 10 && height > 10) {
+          setSnipSelection({ x, y, width, height, shape: snipShape });
+        }
       }
       setIsSnipping(false);
       return;
@@ -643,7 +715,29 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
             </>
           )}
 
-          {snipSelection && (
+          {selectedTool === "snip" && (
+            <div className="flex items-center gap-1 ml-2 pl-2 border-l">
+              <span className="text-xs text-muted-foreground mr-1">Shape:</span>
+              {[
+                { id: "rectangle" as const, label: "Rect" },
+                { id: "square" as const, label: "Square" },
+                { id: "circle" as const, label: "Circle" },
+                { id: "freehand" as const, label: "Free" },
+              ].map((s) => (
+                <Button
+                  key={s.id}
+                  variant={snipShape === s.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSnipShape(s.id)}
+                  className="px-2 py-1 h-7 text-xs"
+                >
+                  {s.label}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {(snipSelection || snipPoints.length > 2) && (
             <Button
               variant="default"
               size="sm"
@@ -1065,7 +1159,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               return null;
             })}
 
-            {snipSelection && (
+            {snipSelection && snipSelection.shape !== "circle" && (
               <rect
                 x={snipSelection.x}
                 y={snipSelection.y}
@@ -1075,6 +1169,31 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                 stroke="#0066ff"
                 strokeWidth={2}
                 strokeDasharray="8,4"
+              />
+            )}
+
+            {snipSelection && snipSelection.shape === "circle" && (
+              <ellipse
+                cx={snipSelection.x + snipSelection.width / 2}
+                cy={snipSelection.y + snipSelection.height / 2}
+                rx={snipSelection.width / 2}
+                ry={snipSelection.height / 2}
+                fill="rgba(0, 102, 255, 0.1)"
+                stroke="#0066ff"
+                strokeWidth={2}
+                strokeDasharray="8,4"
+              />
+            )}
+
+            {snipPoints.length > 1 && (
+              <path
+                d={snipPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + (snipPoints.length > 2 ? " Z" : "")}
+                fill="rgba(0, 102, 255, 0.1)"
+                stroke="#0066ff"
+                strokeWidth={2}
+                strokeDasharray="8,4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             )}
 
