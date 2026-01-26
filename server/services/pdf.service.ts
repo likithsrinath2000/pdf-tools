@@ -229,6 +229,32 @@ export class PDFService {
     };
   }
 
+  async getPDFPreview(inputPath: string): Promise<{ pageCount: number; width: number; height: number; previewImage?: string }> {
+    const pdfBytes = await fs.readFile(inputPath);
+    const pdf = await PDFDocument.load(pdfBytes);
+    const pageCount = pdf.getPageCount();
+    
+    const firstPage = pdf.getPages()[0];
+    const { width, height } = firstPage.getSize();
+    
+    let previewImage: string | undefined;
+    try {
+      const { stdout } = await execPromise(
+        `pdftoppm -png -f 1 -l 1 -scale-to 400 "${inputPath}" -`
+      );
+      previewImage = `data:image/png;base64,${Buffer.from(stdout, 'binary').toString('base64')}`;
+    } catch (err) {
+      previewImage = undefined;
+    }
+    
+    return {
+      pageCount,
+      width,
+      height,
+      previewImage
+    };
+  }
+
   async rotatePDF(inputPath: string, outputPath: string, angle: number): Promise<void> {
     const pdfBytes = await fs.readFile(inputPath);
     const pdf = await PDFDocument.load(pdfBytes);
@@ -398,6 +424,7 @@ export class PDFService {
       signatureText?: string;
       signatureImage?: string;
       signatureType: 'text' | 'drawn';
+      signatureScale?: number;
       position: { page: number; x: number; y: number };
     }
   ): Promise<void> {
@@ -406,6 +433,7 @@ export class PDFService {
     
     const pages = pdf.getPages();
     const pageIdx = options.position.page - 1;
+    const scale = options.signatureScale || 1;
     
     if (pageIdx >= 0 && pageIdx < pages.length) {
       const page = pages[pageIdx];
@@ -415,9 +443,9 @@ export class PDFService {
         const imageBytes = Buffer.from(base64Data, 'base64');
         const pngImage = await pdf.embedPng(imageBytes);
         
-        const scaleFactor = 0.5;
-        const imgWidth = pngImage.width * scaleFactor;
-        const imgHeight = pngImage.height * scaleFactor;
+        const baseScaleFactor = 0.5;
+        const imgWidth = pngImage.width * baseScaleFactor * scale;
+        const imgHeight = pngImage.height * baseScaleFactor * scale;
         
         page.drawImage(pngImage, {
           x: options.position.x - imgWidth / 2,
@@ -428,18 +456,19 @@ export class PDFService {
       } else {
         const font = await pdf.embedFont(StandardFonts.TimesRomanItalic);
         const text = options.signatureText || 'Signature';
+        const fontSize = 24 * scale;
         
         page.drawText(text, {
           x: options.position.x,
           y: options.position.y,
-          size: 24,
+          size: fontSize,
           font,
           color: rgb(0.1, 0.2, 0.4),
         });
         
         page.drawLine({
           start: { x: options.position.x, y: options.position.y - 5 },
-          end: { x: options.position.x + font.widthOfTextAtSize(text, 24), y: options.position.y - 5 },
+          end: { x: options.position.x + font.widthOfTextAtSize(text, fontSize), y: options.position.y - 5 },
           thickness: 1,
           color: rgb(0, 0, 0),
         });

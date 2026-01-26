@@ -76,6 +76,23 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/pdf-preview", upload.single('file'), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const previewData = await pdfService.getPDFPreview(file.path);
+      
+      await fs.unlink(file.path).catch(() => {});
+      
+      res.json(previewData);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to generate preview" });
+    }
+  });
+
   app.post("/api/jobs", upload.array('files', 20), async (req, res) => {
     try {
       const files = req.files as Express.Multer.File[];
@@ -339,6 +356,7 @@ async function processJobAsync(
           signatureText: options.signatureText,
           signatureImage: options.signatureImage,
           signatureType: options.signatureType || 'text',
+          signatureScale: options.signatureScale || 1,
           position: options.position || { page: 1, x: 100, y: 100 }
         });
         break;

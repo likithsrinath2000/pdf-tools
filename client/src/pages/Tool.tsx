@@ -261,6 +261,7 @@ export default function ToolPage() {
         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
           <FileList files={files} onRemove={removeFile} />
           <SignatureOptions 
+            file={files[0]}
             onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
           />
         </div>
