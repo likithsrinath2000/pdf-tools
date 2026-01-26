@@ -3,11 +3,37 @@ import { Footer } from "@/components/Footer";
 import { ToolCard } from "@/components/ToolCard";
 import { TOOLS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Layers, Zap, FileOutput, FileInput, Edit3, Shield, Image } from "lucide-react";
 
 export default function Home() {
-  const favorites = ["merge-pdf", "split-pdf", "compress-pdf", "pdf-to-word", "word-to-pdf"];
-  const allTools = TOOLS;
+  const favorites = ["merge-pdf", "split-pdf", "compress-pdf", "pdf-to-word", "word-to-pdf", "edit-pdf"];
+
+  const organizeTools = TOOLS.filter(t => t.category === "organize");
+  const optimizeTools = TOOLS.filter(t => t.category === "optimize");
+  const editTools = TOOLS.filter(t => t.category === "edit");
+  const securityTools = TOOLS.filter(t => t.category === "security");
+  const convertToPdfTools = TOOLS.filter(t => t.category === "convert-to-pdf");
+  const convertFromPdfTools = TOOLS.filter(t => t.category === "convert-from-pdf");
+  const imageTools = TOOLS.filter(t => t.category === "image-tools");
+  
+  const ToolSection = ({ title, icon: Icon, color, tools }: { title: string; icon: any; color: string; tools: typeof TOOLS }) => (
+    <div className="mb-12">
+      <div className="flex items-center gap-3 mb-6">
+        <div className={`w-10 h-10 rounded-xl ${color} text-white flex items-center justify-center shadow-lg`}>
+          <Icon size={20} />
+        </div>
+        <h2 className="text-xl font-bold font-display text-slate-900">{title}</h2>
+        <span className="text-sm text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{tools.length} tools</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {tools.map((tool, i) => (
+          <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-300" style={{ animationDelay: `${i * 30}ms` }}>
+            <ToolCard {...tool} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
   
   return (
     <div className="min-h-screen flex flex-col bg-slate-50/50">
@@ -15,26 +41,26 @@ export default function Home() {
       
       <main className="flex-1 pt-24 pb-20 px-4 md:px-8">
         {/* Hero Section */}
-        <div className="max-w-4xl mx-auto text-center mb-20 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold text-slate-900 leading-[1.1]">
+        <div className="max-w-4xl mx-auto text-center mb-16 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-slate-900 leading-[1.1]">
             Every tool you need to work with PDFs
           </h1>
-          <p className="text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             All the tools you need to be more productive and work smarter with documents. 
-            100% free and easy to use.
+            100% free and easy to use. No signup required!
           </p>
-          <div className="flex items-center justify-center gap-4 pt-4">
-            <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-xl shadow-primary/20 hover:scale-105 transition-transform">
-              Explore All Tools
-            </Button>
-          </div>
         </div>
 
-        {/* Most Popular Tools */}
+        {/* Most Popular Tools - Horizontal */}
         <div className="max-w-7xl mx-auto mb-16">
-          <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">Most Popular Tools</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            {allTools.filter(t => favorites.includes(t.id)).map((tool, i) => (
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 text-white flex items-center justify-center shadow-lg">
+              <Zap size={20} />
+            </div>
+            <h2 className="text-xl font-bold font-display text-slate-900">Most Popular</h2>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {TOOLS.filter(t => favorites.includes(t.id)).map((tool, i) => (
               <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
                 <ToolCard {...tool} />
               </div>
@@ -42,34 +68,21 @@ export default function Home() {
           </div>
         </div>
 
-        {/* PDF Tools Grid */}
-        <div className="max-w-7xl mx-auto mb-16">
-          <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">All PDF Tools</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {allTools.filter(t => !favorites.includes(t.id) && t.category !== "image-tools").map((tool, i) => (
-              <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
-                <ToolCard {...tool} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Image Tools Grid */}
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">Image Tools</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {allTools.filter(t => t.category === "image-tools").map((tool, i) => (
-              <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
-                <ToolCard {...tool} />
-              </div>
-            ))}
-          </div>
+          {/* Organized Categories */}
+          <ToolSection title="Organize PDF" icon={Layers} color="bg-red-500" tools={organizeTools} />
+          <ToolSection title="Edit PDF" icon={Edit3} color="bg-purple-500" tools={editTools} />
+          <ToolSection title="Optimize & Repair" icon={Zap} color="bg-green-500" tools={optimizeTools} />
+          <ToolSection title="Security" icon={Shield} color="bg-slate-700" tools={securityTools} />
+          <ToolSection title="Convert to PDF" icon={FileInput} color="bg-yellow-500" tools={convertToPdfTools} />
+          <ToolSection title="Convert from PDF" icon={FileOutput} color="bg-orange-500" tools={convertFromPdfTools} />
+          <ToolSection title="Image Tools" icon={Image} color="bg-blue-600" tools={imageTools} />
         </div>
 
         {/* Feature Section */}
-        <div className="max-w-7xl mx-auto mt-32 grid md:grid-cols-2 gap-12 items-center">
+        <div className="max-w-7xl mx-auto mt-24 grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
-            <h2 className="text-4xl font-bold font-display">
+            <h2 className="text-3xl md:text-4xl font-bold font-display">
               Because life is too short to fight with printers
             </h2>
             <p className="text-lg text-muted-foreground leading-relaxed">
@@ -79,12 +92,11 @@ export default function Home() {
               (We also promise not to ask you for your mother's maiden name just to rotate a page.)
             </p>
           </div>
-          <div className="relative h-64 md:h-96 rounded-3xl bg-slate-200 overflow-hidden shadow-2xl">
-            <img 
-              src="/src/assets/hero-pdf-tools.png" 
-              alt="PDF Tools feature" 
-              className="absolute inset-0 w-full h-full object-cover"
-            />
+          <div className="relative h-64 md:h-80 rounded-3xl bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden shadow-2xl flex items-center justify-center">
+            <div className="text-center p-8">
+              <div className="text-6xl mb-4">📄</div>
+              <p className="text-slate-600 font-medium">Your documents, simplified.</p>
+            </div>
           </div>
         </div>
       </main>
