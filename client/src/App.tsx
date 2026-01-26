@@ -51,8 +51,8 @@ function Router() {
         <Route path="/privacy" component={Privacy} />
         <Route path="/terms" component={Terms} />
         <Route path="/feedback" component={Feedback} />
+        <Route path="/feedback-admin" component={AdminFeedback} />
         <Route path="/tool/:id" component={ToolPage} />
-        <Route path="/admin/feedback" component={AdminFeedback} />
         <Route path="/:id" component={ToolPage} />
         <Route component={NotFound} />
       </Switch>
