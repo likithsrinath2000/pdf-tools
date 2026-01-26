@@ -408,7 +408,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     }
   };
 
-  const captureSnipSelection = () => {
+  const captureSnipSelection = (isCut: boolean = false) => {
     if (!imageRef.current || !pageImage) return;
     
     const img = imageRef.current;
@@ -445,6 +445,25 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       
       const imageData = canvas.toDataURL("image/png");
       setClipboard(imageData);
+      
+      if (isCut) {
+        const cutOverlay: Annotation = {
+          id: `ann-${Date.now()}`,
+          type: "rectangle",
+          page: currentPage,
+          x: minX,
+          y: minY,
+          width: width,
+          height: height,
+          color: "#ffffff",
+          fillColor: "#ffffff",
+          filled: true,
+        };
+        const newAnnotations = [...annotations, cutOverlay];
+        setAnnotations(newAnnotations);
+        saveToHistory(newAnnotations);
+      }
+      
       setSnipPoints([]);
     } else if (snipSelection) {
       const sx = snipSelection.x * scaleX;
@@ -468,6 +487,25 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       
       const imageData = canvas.toDataURL("image/png");
       setClipboard(imageData);
+      
+      if (isCut) {
+        const cutOverlay: Annotation = {
+          id: `ann-${Date.now()}`,
+          type: snipSelection.shape === "circle" ? "circle" : "rectangle",
+          page: currentPage,
+          x: snipSelection.x,
+          y: snipSelection.y,
+          width: snipSelection.width,
+          height: snipSelection.height,
+          color: "#ffffff",
+          fillColor: "#ffffff",
+          filled: true,
+        };
+        const newAnnotations = [...annotations, cutOverlay];
+        setAnnotations(newAnnotations);
+        saveToHistory(newAnnotations);
+      }
+      
       setSnipSelection(null);
     }
     
@@ -655,6 +693,15 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const pageAnnotations = annotations.filter((a) => a.page === currentPage);
   const selectedAnnotation = annotations.find(a => a.id === selectedId);
 
+  const getCursor = () => {
+    if (isDragging) return "move";
+    if (resizeHandle) return `${resizeHandle}-resize`;
+    if (selectedTool === "select" && selectedId) return "move";
+    if (selectedTool === "select") return "default";
+    if (selectedTool === "snip") return "crosshair";
+    return "crosshair";
+  };
+
   const tools: { id: ToolType; icon: any; label: string }[] = [
     { id: "select", icon: Move, label: "Select" },
     { id: "snip", icon: Scissors, label: "Snip" },
@@ -801,15 +848,26 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
           )}
 
           {(snipSelection || snipPoints.length > 2) && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={captureSnipSelection}
-              data-testid="capture-snip-btn"
-            >
-              <Scissors className="h-4 w-4 mr-1" />
-              Copy Selection
-            </Button>
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => captureSnipSelection(false)}
+                data-testid="capture-snip-btn"
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => captureSnipSelection(true)}
+                data-testid="cut-snip-btn"
+              >
+                <Scissors className="h-4 w-4 mr-1" />
+                Cut
+              </Button>
+            </>
           )}
 
           {clipboard && (
@@ -1028,7 +1086,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
           style={{ 
             maxWidth: "100%", 
             width: "fit-content",
-            cursor: selectedTool === "select" ? "default" : "crosshair"
+            cursor: getCursor()
           }}
           onClick={handleCanvasClick}
           onMouseDown={handleMouseDown}
