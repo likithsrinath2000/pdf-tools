@@ -63,7 +63,7 @@ export function Navbar() {
                 PDF Tools
               </NavigationMenuTrigger>
               <NavigationMenuContent>
-                <div className="w-[800px] p-6 bg-white rounded-xl shadow-xl grid grid-cols-4 gap-6">
+                <div className="w-[600px] lg:w-[800px] p-6 bg-white rounded-xl shadow-xl grid grid-cols-3 lg:grid-cols-4 gap-6">
                   <div className="space-y-4">
                     <h4 className="font-bold text-sm text-red-600 uppercase tracking-wider">Organize PDF</h4>
                     <ul className="space-y-2">
@@ -101,6 +101,7 @@ export function Navbar() {
                         </li>
                       ))}
                     </ul>
+                    {/* Security moved here for better spacing on smaller screens if needed */}
                   </div>
 
                   <div className="space-y-4">
