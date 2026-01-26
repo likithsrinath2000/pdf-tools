@@ -56,36 +56,14 @@ export function Navbar() {
       
       {/* Desktop Menu */}
       <div className="hidden lg:flex items-center gap-1">
-        <Link href="/merge-pdf">
-           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-red-50 hover:text-red-600", location === "/merge-pdf" && "bg-red-50 text-red-600")}>
-             Merge PDF
-           </Button>
-        </Link>
-        <Link href="/split-pdf">
-           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-red-50 hover:text-red-600", location === "/split-pdf" && "bg-red-50 text-red-600")}>
-             Split PDF
-           </Button>
-        </Link>
-        <Link href="/compress-pdf">
-           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-green-50 hover:text-green-600", location === "/compress-pdf" && "bg-green-50 text-green-600")}>
-             Compress PDF
-           </Button>
-        </Link>
-        <Link href="/compress-image">
-           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-blue-50 hover:text-blue-600", location === "/compress-image" && "bg-blue-50 text-blue-600")}>
-             Compress Image
-           </Button>
-        </Link>
-
-        {/* Mega Menu */}
         <NavigationMenu>
           <NavigationMenuList>
             <NavigationMenuItem>
               <NavigationMenuTrigger className="bg-transparent hover:bg-slate-100 font-semibold">
-                All Tools
+                PDF Tools
               </NavigationMenuTrigger>
-              <NavigationMenuContent className="right-0 w-[800px] md:w-[600px] lg:w-[800px]">
-                <div className="w-full p-6 bg-white rounded-xl shadow-xl grid grid-cols-4 gap-6">
+              <NavigationMenuContent>
+                <div className="w-[800px] p-6 bg-white rounded-xl shadow-xl grid grid-cols-4 gap-6">
                   <div className="space-y-4">
                     <h4 className="font-bold text-sm text-red-600 uppercase tracking-wider">Organize PDF</h4>
                     <ul className="space-y-2">
@@ -103,16 +81,6 @@ export function Navbar() {
                     <h4 className="font-bold text-sm text-green-600 uppercase tracking-wider">Optimize</h4>
                     <ul className="space-y-2">
                       {optimizeTools.map(tool => (
-                        <li key={tool.id}>
-                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
-                             {tool.title}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                    <h4 className="font-bold text-sm text-blue-600 uppercase tracking-wider mt-6">Image Tools</h4>
-                    <ul className="space-y-2">
-                      {imageTools.map(tool => (
                         <li key={tool.id}>
                           <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
                              {tool.title}
@@ -160,8 +128,44 @@ export function Navbar() {
                 </div>
               </NavigationMenuContent>
             </NavigationMenuItem>
+            
+            <NavigationMenuItem>
+               <NavigationMenuTrigger className="bg-transparent hover:bg-slate-100 font-semibold">
+                Image Tools
+               </NavigationMenuTrigger>
+               <NavigationMenuContent>
+                  <div className="w-[300px] p-6 bg-white rounded-xl shadow-xl">
+                    <h4 className="font-bold text-sm text-blue-600 uppercase tracking-wider mb-4">Image Tools</h4>
+                    <ul className="space-y-2">
+                      {imageTools.map(tool => (
+                        <li key={tool.id}>
+                          <Link href={`/${tool.id}`} className="block text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-1 rounded transition-colors">
+                             {tool.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+               </NavigationMenuContent>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
+
+        <Link href="/merge-pdf">
+           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-red-50 hover:text-red-600", location === "/merge-pdf" && "bg-red-50 text-red-600")}>
+             Merge PDF
+           </Button>
+        </Link>
+        <Link href="/split-pdf">
+           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-red-50 hover:text-red-600", location === "/split-pdf" && "bg-red-50 text-red-600")}>
+             Split PDF
+           </Button>
+        </Link>
+        <Link href="/compress-pdf">
+           <Button variant="ghost" className={cn("text-sm font-medium hover:bg-green-50 hover:text-green-600", location === "/compress-pdf" && "bg-green-50 text-green-600")}>
+             Compress PDF
+           </Button>
+        </Link>
       </div>
 
       {/* Mobile Menu */}
