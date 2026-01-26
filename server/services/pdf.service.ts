@@ -8,14 +8,30 @@ import path from 'path';
 const execPromise = promisify(exec);
 
 export class PDFService {
-  async mergePDFs(inputPaths: string[], outputPath: string): Promise<void> {
+  async mergePDFs(inputPaths: string[], outputPath: string, pageOrder?: { fileIndex: number; pageNumber: number }[]): Promise<void> {
     const mergedPdf = await PDFDocument.create();
     
-    for (const inputPath of inputPaths) {
-      const pdfBytes = await fs.readFile(inputPath);
-      const pdf = await PDFDocument.load(pdfBytes);
-      const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
+    if (pageOrder && pageOrder.length > 0) {
+      const loadedPdfs: PDFDocument[] = [];
+      for (const inputPath of inputPaths) {
+        const pdfBytes = await fs.readFile(inputPath);
+        const pdf = await PDFDocument.load(pdfBytes);
+        loadedPdfs.push(pdf);
+      }
+      
+      for (const { fileIndex, pageNumber } of pageOrder) {
+        if (loadedPdfs[fileIndex]) {
+          const [copiedPage] = await mergedPdf.copyPages(loadedPdfs[fileIndex], [pageNumber - 1]);
+          mergedPdf.addPage(copiedPage);
+        }
+      }
+    } else {
+      for (const inputPath of inputPaths) {
+        const pdfBytes = await fs.readFile(inputPath);
+        const pdf = await PDFDocument.load(pdfBytes);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+      }
     }
     
     const mergedPdfBytes = await mergedPdf.save();

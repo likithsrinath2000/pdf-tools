@@ -218,21 +218,58 @@ async function processJobAsync(
 
     switch (toolId) {
       case "merge-pdf":
-        await pdfService.mergePDFs(inputFiles.map(f => f.path), outputPath);
+        await pdfService.mergePDFs(inputFiles.map(f => f.path), outputPath, options.pageOrder);
         break;
 
       case "split-pdf":
-        const ranges = options.ranges || [{ start: 1, end: 2 }];
-        const splitFiles = await pdfService.splitPDF(inputFiles[0].path, ranges, outputDir);
-        
-        const JSZip = (await import('jszip')).default;
-        const zip = new JSZip();
-        for (let i = 0; i < splitFiles.length; i++) {
-          const content = await fs.readFile(splitFiles[i]);
-          zip.file(`split_${i + 1}.pdf`, content);
+        if (options.mode === "extract" && options.pagesToExtract?.length > 0) {
+          const pdfOutputPath = outputPath.replace('.zip', '.pdf');
+          await pdfService.extractPages(inputFiles[0].path, options.pagesToExtract, pdfOutputPath);
+          
+          await storage.updateJobOutput(jobId, pdfOutputPath);
+          logJobProgress(jobId, toolId, 100, 'completed');
+          await storage.updateJobStatus(jobId, "completed", 100);
+          
+          for (const file of inputFiles) {
+            await fs.unlink(file.path).catch(() => {});
+            logFileOperation('cleanup', file.path, true);
+          }
+          
+          const duration = (Date.now() - startTime) / 1000;
+          logJobCompleted(jobId, toolId, duration);
+          jobsProcessed.inc({ tool_id: toolId, status: 'completed' });
+          activeJobs.dec();
+          return;
+        } else {
+          let ranges: { start: number; end: number }[] = [];
+          
+          if (options.mode === "fixed" && options.splitEvery) {
+            const pdfBytes = await fs.readFile(inputFiles[0].path);
+            const { PDFDocument } = await import('pdf-lib');
+            const tempPdf = await PDFDocument.load(pdfBytes);
+            const totalPages = tempPdf.getPageCount();
+            const step = options.splitEvery;
+            
+            for (let i = 1; i <= totalPages; i += step) {
+              ranges.push({ start: i, end: Math.min(i + step - 1, totalPages) });
+            }
+          } else if (options.ranges) {
+            ranges = parseRanges(options.ranges);
+          } else {
+            ranges = [{ start: 1, end: 2 }];
+          }
+          
+          const splitFiles = await pdfService.splitPDF(inputFiles[0].path, ranges, outputDir);
+          
+          const JSZip = (await import('jszip')).default;
+          const zip = new JSZip();
+          for (let i = 0; i < splitFiles.length; i++) {
+            const content = await fs.readFile(splitFiles[i]);
+            zip.file(`split_${i + 1}.pdf`, content);
+          }
+          const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+          await fs.writeFile(outputPath.replace(path.extname(outputPath), '.zip'), zipBuffer);
         }
-        const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
-        await fs.writeFile(outputPath.replace(path.extname(outputPath), '.zip'), zipBuffer);
         break;
 
       case "remove-pages":
@@ -458,6 +495,29 @@ async function processJobAsync(
     jobsProcessed.inc({ tool_id: toolId, status: 'failed' });
     activeJobs.dec();
   }
+}
+
+function parseRanges(rangeStr: string): { start: number; end: number }[] {
+  const ranges: { start: number; end: number }[] = [];
+  const parts = rangeStr.split(',').map(p => p.trim()).filter(Boolean);
+  
+  for (const part of parts) {
+    if (part.includes('-')) {
+      const [startStr, endStr] = part.split('-').map(s => s.trim());
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      if (!isNaN(start) && !isNaN(end)) {
+        ranges.push({ start, end });
+      }
+    } else {
+      const page = parseInt(part, 10);
+      if (!isNaN(page)) {
+        ranges.push({ start: page, end: page });
+      }
+    }
+  }
+  
+  return ranges.length > 0 ? ranges : [{ start: 1, end: 2 }];
 }
 
 function getOutputExtension(toolId: string): string {
