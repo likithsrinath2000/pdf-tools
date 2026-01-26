@@ -44,10 +44,12 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b z-50 px-4 md:px-8 flex items-center justify-between shadow-sm">
       <Link href="/">
-        <div className="flex items-center gap-2 cursor-pointer group">
-          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-white font-bold text-xl group-hover:scale-105 transition-transform">
-            P
-          </div>
+        <div className="flex items-center gap-3 cursor-pointer group">
+          <img 
+            src="/src/assets/logo-humorous.png" 
+            alt="Cool PDF Mascot" 
+            className="w-10 h-10 object-contain group-hover:scale-110 transition-transform group-hover:rotate-12"
+          />
           <span className="font-display font-bold text-2xl tracking-tight text-foreground group-hover:text-slate-800 transition-colors">
             PDF<span className="text-primary">Tools</span>
           </span>

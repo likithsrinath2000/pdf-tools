@@ -3,8 +3,12 @@ export function Footer() {
     <footer className="bg-slate-50 border-t py-12 px-4 md:px-8 mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
         <div className="flex flex-col items-center md:items-start gap-4">
-          <div className="flex items-center gap-2">
-             <div className="w-6 h-6 bg-primary rounded-sm flex items-center justify-center text-white font-bold text-xs">P</div>
+          <div className="flex items-center gap-3">
+             <img 
+               src="/src/assets/logo-humorous.png" 
+               alt="Cool PDF Mascot" 
+               className="w-8 h-8 object-contain hover:rotate-12 transition-transform"
+             />
              <span className="font-display font-bold text-xl">PDFTools</span>
           </div>
           <p className="text-sm text-muted-foreground text-center md:text-left max-w-md">
