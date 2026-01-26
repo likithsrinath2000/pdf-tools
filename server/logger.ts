@@ -1,10 +1,11 @@
 import winston from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
 import fs from 'fs';
 
-const logLevel = process.env.LOG_LEVEL || 'debug';
+const logLevel = process.env.LOG_LEVEL || 'info';
+const logsDir = process.env.LOGS_DIR || path.join(process.cwd(), 'logs');
 
-const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
@@ -12,6 +13,32 @@ if (!fs.existsSync(logsDir)) {
 const customFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
   const metaStr = Object.keys(meta).length ? ` | ${JSON.stringify(meta)}` : '';
   return `${timestamp} [${level.toUpperCase()}] ${message}${metaStr}`;
+});
+
+const errorRotateTransport = new DailyRotateFile({
+  filename: path.join(logsDir, 'error-%DATE%.log'),
+  datePattern: 'YYYY-MM-DD',
+  level: 'error',
+  maxSize: '20m',
+  maxFiles: '14d',
+  zippedArchive: true,
+});
+
+const combinedRotateTransport = new DailyRotateFile({
+  filename: path.join(logsDir, 'combined-%DATE%.log'),
+  datePattern: 'YYYY-MM-DD',
+  maxSize: '50m',
+  maxFiles: '7d',
+  zippedArchive: true,
+});
+
+const accessRotateTransport = new DailyRotateFile({
+  filename: path.join(logsDir, 'access-%DATE%.log'),
+  datePattern: 'YYYY-MM-DD',
+  level: 'info',
+  maxSize: '50m',
+  maxFiles: '7d',
+  zippedArchive: true,
 });
 
 export const logger = winston.createLogger({
@@ -23,27 +50,27 @@ export const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'pdftools' },
   transports: [
-    new winston.transports.File({ 
-      filename: path.join(logsDir, 'error.log'), 
-      level: 'error',
-      maxsize: 5242880,
-      maxFiles: 5,
-    }),
-    new winston.transports.File({ 
-      filename: path.join(logsDir, 'combined.log'),
-      maxsize: 5242880,
-      maxFiles: 5,
-    }),
+    errorRotateTransport,
+    combinedRotateTransport,
   ],
 });
 
-logger.add(new winston.transports.Console({
-  format: winston.format.combine(
-    winston.format.colorize(),
-    winston.format.timestamp({ format: 'HH:mm:ss' }),
-    customFormat
-  ),
-}));
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.timestamp({ format: 'HH:mm:ss' }),
+      customFormat
+    ),
+  }));
+} else {
+  logger.add(new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+      winston.format.json()
+    ),
+  }));
+}
 
 export function logJobCreated(jobId: string, toolId: string, fileCount: number, options?: any) {
   logger.info(`Job created: ${toolId}`, { 
@@ -121,4 +148,8 @@ export function logHealthCheck(status: 'healthy' | 'unhealthy', details?: Record
   } else {
     logger.warn('Health check failed', details);
   }
+}
+
+export function logCleanup(filesDeleted: number, bytesFreed: number) {
+  logger.info(`Cleanup completed: ${filesDeleted} files, ${(bytesFreed / 1024 / 1024).toFixed(2)}MB freed`);
 }
