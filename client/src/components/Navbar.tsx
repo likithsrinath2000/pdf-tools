@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { 
@@ -8,12 +9,26 @@ import {
   NavigationMenuList, 
   NavigationMenuTrigger 
 } from "@/components/ui/navigation-menu";
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetTrigger 
+} from "@/components/ui/sheet";
+import { 
+  Accordion, 
+  AccordionContent, 
+  AccordionItem, 
+  AccordionTrigger 
+} from "@/components/ui/accordion";
 import { TOOLS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 
 export function Navbar() {
   const [location] = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
 
   // Group tools for mega menu
   const organizeTools = TOOLS.filter(t => t.category === "organize");
@@ -23,6 +38,8 @@ export function Navbar() {
   const editTools = TOOLS.filter(t => t.category === "edit");
   const securityTools = TOOLS.filter(t => t.category === "security");
   const imageTools = TOOLS.filter(t => t.category === "image-tools");
+
+  const closeMenu = () => setIsOpen(false);
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b z-50 px-4 md:px-8 flex items-center justify-between shadow-sm">
@@ -37,7 +54,8 @@ export function Navbar() {
         </div>
       </Link>
       
-      <div className="hidden md:flex items-center gap-1">
+      {/* Desktop Menu */}
+      <div className="hidden lg:flex items-center gap-1">
         <Link href="/merge-pdf">
            <Button variant="ghost" className={cn("text-sm font-medium hover:bg-red-50 hover:text-red-600", location === "/merge-pdf" && "bg-red-50 text-red-600")}>
              Merge PDF
@@ -144,6 +162,170 @@ export function Navbar() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
+      </div>
+
+      {/* Mobile Menu */}
+      <div className="lg:hidden">
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Menu size={24} />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[300px] sm:w-[400px] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle className="text-left font-display text-2xl font-bold">Menu</SheetTitle>
+            </SheetHeader>
+            <div className="mt-8 flex flex-col gap-2">
+              <Link href="/merge-pdf" onClick={closeMenu}>
+                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                    <span className="font-medium text-slate-700">Merge PDF</span>
+                 </div>
+              </Link>
+              <Link href="/split-pdf" onClick={closeMenu}>
+                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                    <span className="font-medium text-slate-700">Split PDF</span>
+                 </div>
+              </Link>
+              <Link href="/compress-pdf" onClick={closeMenu}>
+                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                    <span className="font-medium text-slate-700">Compress PDF</span>
+                 </div>
+              </Link>
+              <Link href="/compress-image" onClick={closeMenu}>
+                 <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                    <span className="font-medium text-slate-700">Compress Image</span>
+                 </div>
+              </Link>
+
+              <div className="my-4 border-t" />
+
+              <h4 className="px-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">All Tools</h4>
+              
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="organize">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                      Organize PDF
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {organizeTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="optimize">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      Optimize
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {optimizeTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="convert-to">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                      Convert to PDF
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {convertToPdfTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="convert-from">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-purple-500" />
+                      Convert from PDF
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {convertFromPdfTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="security">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-slate-700" />
+                      Security
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {securityTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+                
+                <AccordionItem value="image">
+                  <AccordionTrigger className="px-3 hover:no-underline hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-600" />
+                      Image Tools
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-2 pt-1">
+                    <div className="flex flex-col gap-1 pl-4 border-l-2 ml-1">
+                      {imageTools.map(tool => (
+                        <Link key={tool.id} href={`/${tool.id}`} onClick={closeMenu}>
+                          <div className="py-2 text-slate-600 hover:text-primary cursor-pointer">
+                            {tool.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </nav>
   );
