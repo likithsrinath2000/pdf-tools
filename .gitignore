@@ -4,3 +4,27 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Temporary directories
+uploads/
+temp_files/
+output_files/
+logs/
+attached_assets/
+
+# Feedback storage (keep structure but not content)
+feedback/*.json
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Cache
+.cache/

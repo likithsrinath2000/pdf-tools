@@ -7,6 +7,7 @@ import pdfRoutes from "./pdf.routes";
 import jobRoutes from "./job.routes";
 import imageRoutes from "./image.routes";
 import officeRoutes from "./office.routes";
+import feedbackRoutes from "./feedback.routes";
 
 /**
  * Registers all API routes for the application
@@ -74,6 +75,7 @@ export async function registerRoutes(
   app.use("/api/jobs", jobRoutes);
   app.use("/api/images", imageRoutes);
   app.use("/api/office", officeRoutes);
+  app.use("/api/feedback", feedbackRoutes);
 
   return httpServer;
 }
