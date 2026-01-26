@@ -103,6 +103,23 @@ export class APIClient {
       throw new Error('Failed to delete job');
     }
   }
+
+  async checkPDFEncrypted(file: File): Promise<boolean> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.baseUrl}/check-pdf-encrypted`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to check PDF encryption');
+    }
+
+    const result = await response.json();
+    return result.isEncrypted;
+  }
 }
 
 export const apiClient = new APIClient();

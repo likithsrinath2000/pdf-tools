@@ -6,7 +6,7 @@ import { TOOLS } from "@/lib/constants";
 import { FileUploader } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle, X } from "lucide-react";
+import { Download, File as FileIcon, Trash2, ArrowLeft, ArrowRight, RefreshCw, CheckCircle2, ImageIcon, AlertCircle, X, Unlock, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import NotFound from "./not-found";
 import { apiClient } from "@/lib/api";
@@ -38,6 +38,8 @@ export default function ToolPage() {
   const [currentJob, setCurrentJob] = useState<ProcessingJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processingOptions, setProcessingOptions] = useState<any>({});
+  const [pdfNotEncrypted, setPdfNotEncrypted] = useState(false);
+  const [checkingEncryption, setCheckingEncryption] = useState(false);
 
   // Reset state when tool changes
   useEffect(() => {
@@ -47,19 +49,33 @@ export default function ToolPage() {
     setCurrentJob(null);
     setError(null);
     setProcessingOptions({});
+    setPdfNotEncrypted(false);
+    setCheckingEncryption(false);
   }, [toolId]);
 
   if (!tool) {
     return <NotFound />;
   }
 
-  const handleFilesSelected = (selectedFiles: File[]) => {
-    if (tool?.maxFiles) {
-      setFiles(selectedFiles.slice(0, tool.maxFiles));
-    } else {
-      setFiles(prev => [...prev, ...selectedFiles]);
-    }
+  const handleFilesSelected = async (selectedFiles: File[]) => {
+    const filesToUse = tool?.maxFiles ? selectedFiles.slice(0, tool.maxFiles) : selectedFiles;
+    setFiles(prev => tool?.maxFiles ? filesToUse : [...prev, ...filesToUse]);
     setStage("files-selected");
+    
+    if (toolId === "unlock-pdf" && filesToUse.length > 0) {
+      setCheckingEncryption(true);
+      setPdfNotEncrypted(false);
+      try {
+        const isEncrypted = await apiClient.checkPDFEncrypted(filesToUse[0]);
+        if (!isEncrypted) {
+          setPdfNotEncrypted(true);
+        }
+      } catch (err) {
+        console.error("Failed to check encryption:", err);
+      } finally {
+        setCheckingEncryption(false);
+      }
+    }
   };
 
   const removeFile = (index: number) => {
@@ -166,6 +182,47 @@ export default function ToolPage() {
     }
 
     if (tool.id === "unlock-pdf") {
+      if (checkingEncryption) {
+        return (
+          <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <FileList files={files} onRemove={removeFile} />
+            <div className="flex items-center gap-3 p-6 bg-slate-50 rounded-2xl border">
+              <RefreshCw className="animate-spin text-primary" size={24} />
+              <span className="text-muted-foreground">Checking if PDF is password protected...</span>
+            </div>
+          </div>
+        );
+      }
+
+      if (pdfNotEncrypted) {
+        return (
+          <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <FileList files={files} onRemove={removeFile} />
+            <div className="w-full max-w-md mx-auto p-8 bg-green-50 border-2 border-green-200 rounded-2xl text-center space-y-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                <ShieldCheck className="text-green-600" size={32} />
+              </div>
+              <h3 className="text-xl font-semibold text-green-800">Already Unprotected!</h3>
+              <p className="text-green-700">
+                Good news! This PDF doesn't have password protection. 
+                It's already free as a bird! No unlocking needed.
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setFiles([]);
+                  setPdfNotEncrypted(false);
+                  setStage("upload");
+                }}
+                className="mt-4"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Upload a different PDF
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
           <FileList files={files} onRemove={removeFile} />

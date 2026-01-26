@@ -59,6 +59,23 @@ export async function registerRoutes(
     res.end(await register.metrics());
   });
 
+  app.post("/api/check-pdf-encrypted", upload.single('file'), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const isEncrypted = await pdfService.isPDFEncrypted(file.path);
+      
+      await fs.unlink(file.path).catch(() => {});
+      
+      res.json({ isEncrypted });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to check PDF" });
+    }
+  });
+
   app.post("/api/jobs", upload.array('files', 20), async (req, res) => {
     try {
       const files = req.files as Express.Multer.File[];
