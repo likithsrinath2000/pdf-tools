@@ -44,6 +44,12 @@ A lightweight, scalable, and production-ready web application for PDF and image 
 - Rotate Image - Rotate by degrees
 - Convert Format - Change image format (JPG, PNG, WebP, TIFF)
 
+### Create Office Documents
+
+- Create Word Doc - Build .docx documents from scratch with rich text editor
+- Create Excel - Design spreadsheets (.xlsx) with rows, columns, and formulas
+- Create PowerPoint - Build presentations (.pptx) with slides, titles, and content
+
 ## Technology Stack
 
 ### Frontend

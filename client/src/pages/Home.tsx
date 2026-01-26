@@ -3,7 +3,7 @@ import { Footer } from "@/components/Footer";
 import { ToolCard } from "@/components/ToolCard";
 import { TOOLS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Layers, Zap, FileOutput, FileInput, Edit3, Shield, Image } from "lucide-react";
+import { ArrowRight, Layers, Zap, FileOutput, FileInput, Edit3, Shield, Image, FilePlus } from "lucide-react";
 
 export default function Home() {
   const favorites = ["merge-pdf", "split-pdf", "compress-pdf", "pdf-to-word", "word-to-pdf", "edit-pdf"];
@@ -15,6 +15,7 @@ export default function Home() {
   const convertToPdfTools = TOOLS.filter(t => t.category === "convert-to-pdf");
   const convertFromPdfTools = TOOLS.filter(t => t.category === "convert-from-pdf");
   const imageTools = TOOLS.filter(t => t.category === "image-tools");
+  const createOfficeTools = TOOLS.filter(t => t.category === "create-office");
   
   const ToolSection = ({ title, icon: Icon, color, tools }: { title: string; icon: any; color: string; tools: typeof TOOLS }) => (
     <div className="mb-12">
@@ -77,6 +78,7 @@ export default function Home() {
           <ToolSection title="Convert to PDF" icon={FileInput} color="bg-yellow-500" tools={convertToPdfTools} />
           <ToolSection title="Convert from PDF" icon={FileOutput} color="bg-orange-500" tools={convertFromPdfTools} />
           <ToolSection title="Image Tools" icon={Image} color="bg-blue-600" tools={imageTools} />
+          <ToolSection title="Create Office Documents" icon={FilePlus} color="bg-indigo-600" tools={createOfficeTools} />
         </div>
 
         {/* Feature Section */}

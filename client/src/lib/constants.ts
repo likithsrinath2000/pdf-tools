@@ -13,7 +13,7 @@ export interface Tool {
   color: string;
   accept: string;
   action: string;
-  category: "organize" | "optimize" | "convert-to-pdf" | "convert-from-pdf" | "security" | "edit" | "image-tools";
+  category: "organize" | "optimize" | "convert-to-pdf" | "convert-from-pdf" | "security" | "edit" | "image-tools" | "create-office";
   maxFiles?: number;
 }
 
@@ -292,7 +292,7 @@ export const TOOLS: Tool[] = [
     color: "bg-blue-600",
     accept: "",
     action: "Create DOCX",
-    category: "edit",
+    category: "create-office",
     maxFiles: 0
   },
   {
@@ -303,7 +303,7 @@ export const TOOLS: Tool[] = [
     color: "bg-green-600",
     accept: "",
     action: "Create XLSX",
-    category: "edit",
+    category: "create-office",
     maxFiles: 0
   },
   {
@@ -314,7 +314,7 @@ export const TOOLS: Tool[] = [
     color: "bg-orange-500",
     accept: "",
     action: "Create PPTX",
-    category: "edit",
+    category: "create-office",
     maxFiles: 0
   },
 
