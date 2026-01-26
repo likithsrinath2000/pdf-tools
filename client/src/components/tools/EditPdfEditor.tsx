@@ -26,7 +26,9 @@ import {
   Palette,
   Copy,
   Scissors,
-  Clipboard
+  Clipboard,
+  Undo,
+  Redo
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -112,6 +114,8 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [snipStart, setSnipStart] = useState<{ x: number; y: number } | null>(null);
   const [snipShape, setSnipShape] = useState<SnipShape>("rectangle");
   const [snipPoints, setSnipPoints] = useState<{ x: number; y: number }[]>([]);
+  const [history, setHistory] = useState<Annotation[][]>([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -197,6 +201,32 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       y: e.clientY - rect.top,
     };
   };
+
+  const saveToHistory = (newAnnotations: Annotation[]) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push([...newAnnotations]);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      setHistoryIndex(historyIndex - 1);
+      setAnnotations([...history[historyIndex - 1]]);
+      setSelectedId(null);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex(historyIndex + 1);
+      setAnnotations([...history[historyIndex + 1]]);
+      setSelectedId(null);
+    }
+  };
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
 
   const getResizeHandleAtPosition = (ann: Annotation, pos: { x: number; y: number }): ResizeHandle => {
     const handleSize = 8;
@@ -460,7 +490,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       imageData: clipboard,
     };
     
-    setAnnotations(prev => [...prev, newAnnotation]);
+    const newAnnotations = [...annotations, newAnnotation];
+    setAnnotations(newAnnotations);
+    saveToHistory(newAnnotations);
     setSelectedId(newAnnotation.id);
   };
 
@@ -551,7 +583,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       newAnnotation.height = maxY - minY || 10;
     }
 
-    setAnnotations(prev => [...prev, newAnnotation]);
+    const newAnnotations = [...annotations, newAnnotation];
+    setAnnotations(newAnnotations);
+    saveToHistory(newAnnotations);
     setIsDrawing(false);
     setDrawStart(null);
     setCurrentPoints([]);
@@ -577,7 +611,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       height: estHeight,
     };
 
-    setAnnotations(prev => [...prev, newAnnotation]);
+    const newAnnotations = [...annotations, newAnnotation];
+    setAnnotations(newAnnotations);
+    saveToHistory(newAnnotations);
     setTextInput("");
     setShowTextInput(false);
     setTextPosition(null);
@@ -586,7 +622,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
 
   const deleteSelected = () => {
     if (!selectedId) return;
-    setAnnotations(prev => prev.filter((a) => a.id !== selectedId));
+    const newAnnotations = annotations.filter((a) => a.id !== selectedId);
+    setAnnotations(newAnnotations);
+    saveToHistory(newAnnotations);
     setSelectedId(null);
   };
 
@@ -601,7 +639,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       x: original.x + 20,
       y: original.y + 20,
     };
-    setAnnotations(prev => [...prev, newAnn]);
+    const newAnnotations = [...annotations, newAnn];
+    setAnnotations(newAnnotations);
+    saveToHistory(newAnnotations);
     setSelectedId(newAnn.id);
   };
 
@@ -691,6 +731,29 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               {tool.label}
             </Button>
           ))}
+
+          <div className="flex items-center gap-1 ml-2 pl-2 border-l">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={undo}
+              disabled={!canUndo}
+              data-testid="undo-btn"
+              title="Undo"
+            >
+              <Undo className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={redo}
+              disabled={!canRedo}
+              data-testid="redo-btn"
+              title="Redo"
+            >
+              <Redo className="h-4 w-4" />
+            </Button>
+          </div>
 
           {selectedId && (
             <>
