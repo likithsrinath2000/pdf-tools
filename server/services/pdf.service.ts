@@ -445,10 +445,21 @@ export class PDFService {
       const { width, height } = page.getSize();
       const fontSize = Math.min(width, height) / 10;
       const textWidth = font.widthOfTextAtSize(watermarkText, fontSize);
+      const textHeight = fontSize;
+      
+      const angle = -45 * (Math.PI / 180);
+      const rotatedWidth = Math.abs(textWidth * Math.cos(angle)) + Math.abs(textHeight * Math.sin(angle));
+      const rotatedHeight = Math.abs(textWidth * Math.sin(angle)) + Math.abs(textHeight * Math.cos(angle));
+      
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      const x = centerX - (textWidth / 2) * Math.cos(angle) + (textHeight / 2) * Math.sin(angle);
+      const y = centerY - (textWidth / 2) * Math.sin(angle) - (textHeight / 2) * Math.cos(angle);
       
       page.drawText(watermarkText, {
-        x: (width - textWidth) / 2,
-        y: height / 2,
+        x,
+        y,
         size: fontSize,
         font,
         color: rgb(0.7, 0.7, 0.7),
