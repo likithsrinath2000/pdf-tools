@@ -414,14 +414,17 @@ export default function ToolPage() {
                   
                   <Button 
                     variant="outline" 
-                    onClick={handleReset}
+                    onClick={() => setStage("files-selected")}
                     className="w-full h-12 text-base rounded-xl border-2 hover:bg-slate-50"
-                    data-testid="button-process-another"
+                    data-testid="button-back-to-edit"
                   >
-                    <Plus className="mr-2 h-5 w-5" /> Process Another File
+                    <ArrowLeft className="mr-2 h-5 w-5" /> Back to Edit Options
                   </Button>
                   
-                  <div className="flex gap-3 justify-center pt-2">
+                  <div className="flex gap-4 justify-center pt-2">
+                    <Button variant="ghost" onClick={handleReset} data-testid="button-start-over">
+                      <Plus className="mr-1 h-4 w-4" /> New File
+                    </Button>
                     <Button 
                       variant="ghost" 
                       onClick={handleDeleteFile} 
