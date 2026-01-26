@@ -16,6 +16,7 @@ interface MergeEditorProps {
   files: File[];
   onReorder: (files: File[]) => void;
   onRemove: (index: number) => void;
+  onPageOrderChange?: (pageOrder: { fileIndex: number; pageNumber: number }[]) => void;
 }
 
 interface PageInfo {
@@ -33,12 +34,14 @@ interface FileInfo {
   thumbnail: string | null;
 }
 
-export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
+export function MergeEditor({ files, onReorder, onRemove, onPageOrderChange }: MergeEditorProps) {
   const [mode, setMode] = useState<"file" | "page">("file");
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [fileInfos, setFileInfos] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const processedFilesRef = useRef<string>("");
+  const onPageOrderChangeRef = useRef(onPageOrderChange);
+  onPageOrderChangeRef.current = onPageOrderChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -134,6 +137,16 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
 
     processFiles();
   }, [files, renderPageToCanvas]);
+
+  useEffect(() => {
+    if (mode === "page" && pages.length > 0 && onPageOrderChangeRef.current) {
+      const pageOrder = pages.map(p => ({
+        fileIndex: p.fileIndex,
+        pageNumber: p.pageNumber
+      }));
+      onPageOrderChangeRef.current(pageOrder);
+    }
+  }, [pages, mode]);
 
   const getFileInfo = (fileIndex: number) => {
     return fileInfos.find(f => f.index === fileIndex);

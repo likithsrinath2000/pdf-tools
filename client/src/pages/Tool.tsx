@@ -160,7 +160,14 @@ export default function ToolPage() {
   // Determine if we show the default list or a custom editor
   const renderContent = () => {
     if (tool.id === "merge-pdf" || tool.id === "remove-pages") {
-      return <MergeEditor files={files} onReorder={handleReorder} onRemove={removeFile} />;
+      return (
+        <MergeEditor 
+          files={files} 
+          onReorder={handleReorder} 
+          onRemove={removeFile}
+          onPageOrderChange={(pageOrder) => setProcessingOptions({ ...processingOptions, pageOrder })}
+        />
+      );
     }
 
     if (tool.id === "organize-pdf") {
@@ -173,7 +180,12 @@ export default function ToolPage() {
     }
     
     if (tool.id === "split-pdf") {
-      return <SplitEditor files={files} />;
+      return (
+        <SplitEditor 
+          files={files}
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
+      );
     }
 
     if (tool.id === "compress-pdf") {
