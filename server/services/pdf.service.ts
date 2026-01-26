@@ -434,22 +434,34 @@ export class PDFService {
     inputPath: string, 
     outputPath: string, 
     watermarkText: string,
-    opacity: number = 0.3
+    opacity: number = 0.3,
+    orientation: number = -45,
+    fontFamily: string = "helvetica-bold",
+    fontSize?: number
   ): Promise<void> {
     const pdfBytes = await fs.readFile(inputPath);
     const pdf = await PDFDocument.load(pdfBytes);
-    const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+    
+    const fontMap: Record<string, typeof StandardFonts[keyof typeof StandardFonts]> = {
+      "helvetica-bold": StandardFonts.HelveticaBold,
+      "helvetica": StandardFonts.Helvetica,
+      "times-roman": StandardFonts.TimesRoman,
+      "times-bold": StandardFonts.TimesRomanBold,
+      "courier": StandardFonts.Courier,
+      "courier-bold": StandardFonts.CourierBold,
+    };
+    
+    const selectedFont = fontMap[fontFamily] || StandardFonts.HelveticaBold;
+    const font = await pdf.embedFont(selectedFont);
     
     const pages = pdf.getPages();
     pages.forEach(page => {
       const { width, height } = page.getSize();
-      const fontSize = Math.min(width, height) / 10;
-      const textWidth = font.widthOfTextAtSize(watermarkText, fontSize);
-      const textHeight = fontSize;
+      const actualFontSize = fontSize || Math.min(width, height) / 10;
+      const textWidth = font.widthOfTextAtSize(watermarkText, actualFontSize);
+      const textHeight = actualFontSize;
       
-      const angle = -45 * (Math.PI / 180);
-      const rotatedWidth = Math.abs(textWidth * Math.cos(angle)) + Math.abs(textHeight * Math.sin(angle));
-      const rotatedHeight = Math.abs(textWidth * Math.sin(angle)) + Math.abs(textHeight * Math.cos(angle));
+      const angle = orientation * (Math.PI / 180);
       
       const centerX = width / 2;
       const centerY = height / 2;
@@ -460,11 +472,11 @@ export class PDFService {
       page.drawText(watermarkText, {
         x,
         y,
-        size: fontSize,
+        size: actualFontSize,
         font,
         color: rgb(0.7, 0.7, 0.7),
         opacity,
-        rotate: degrees(-45),
+        rotate: degrees(orientation),
       });
     });
     

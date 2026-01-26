@@ -366,7 +366,15 @@ async function processJobAsync(
         break;
 
       case "add-watermark":
-        await pdfService.addWatermark(inputFiles[0].path, outputPath, options.watermarkText || 'CONFIDENTIAL', options.opacity || 0.3);
+        await pdfService.addWatermark(
+          inputFiles[0].path, 
+          outputPath, 
+          options.watermarkText || 'CONFIDENTIAL', 
+          options.opacity || 0.3,
+          options.orientation ?? -45,
+          options.fontFamily || 'helvetica-bold',
+          options.fontSize
+        );
         break;
 
       case "edit-pdf":
