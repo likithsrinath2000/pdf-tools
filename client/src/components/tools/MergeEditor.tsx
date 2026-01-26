@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Reorder } from "framer-motion";
-import { FileText, GripVertical, Trash2, GripHorizontal } from "lucide-react";
+import { FileText, GripVertical, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import * as pdfjsLib from "pdfjs-dist";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface MergeEditorProps {
   files: File[];
@@ -11,35 +14,132 @@ interface MergeEditorProps {
   onRemove: (index: number) => void;
 }
 
-interface MockPage {
+interface PageInfo {
   id: string;
   fileIndex: number;
   fileName: string;
   pageNumber: number;
+  thumbnail: string | null;
 }
 
 export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
   const [mode, setMode] = useState<"file" | "page">("file");
-  const [pages, setPages] = useState<MockPage[]>([]);
+  const [pages, setPages] = useState<PageInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fileThumbnails, setFileThumbnails] = useState<Map<string, string>>(new Map());
+  const processedFilesRef = useRef<Set<string>>(new Set());
 
-  // Generate mock pages when files change
+  const renderPageThumbnail = useCallback(async (
+    pdf: pdfjsLib.PDFDocumentProxy,
+    pageNum: number,
+    scale: number = 0.3
+  ): Promise<string> => {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not get canvas context");
+    
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport,
+      canvas: canvas,
+    } as any).promise;
+    
+    return canvas.toDataURL("image/jpeg", 0.7);
+  }, []);
+
   useEffect(() => {
-    const newPages: MockPage[] = [];
-    files.forEach((file, fIndex) => {
-      // Mocking 3 pages per file for demonstration
-      // In a real app, this would come from parsing the PDF
-      const pageCount = 3; 
-      for (let i = 1; i <= pageCount; i++) {
-        newPages.push({
-          id: `${file.name}-${fIndex}-${i}`, // Unique ID composed of filename and index to avoid collisions
-          fileIndex: fIndex,
-          fileName: file.name,
-          pageNumber: i
-        });
+    const processFiles = async () => {
+      if (files.length === 0) {
+        setPages([]);
+        processedFilesRef.current.clear();
+        setFileThumbnails(new Map());
+        return;
       }
-    });
-    setPages(newPages);
-  }, [files]);
+
+      const currentFileKeys = new Set(files.map((f, i) => `${f.name}-${f.size}-${i}`));
+      const previousFileKeys = processedFilesRef.current;
+      
+      const newFiles = files.filter((f, i) => !previousFileKeys.has(`${f.name}-${f.size}-${i}`));
+      
+      if (newFiles.length === 0 && currentFileKeys.size === previousFileKeys.size) {
+        return;
+      }
+
+      setLoading(true);
+      
+      try {
+        const allPages: PageInfo[] = [];
+        const newThumbnails = new Map(fileThumbnails);
+        
+        for (let fIndex = 0; fIndex < files.length; fIndex++) {
+          const file = files[fIndex];
+          const fileKey = `${file.name}-${file.size}-${fIndex}`;
+          
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const pageCount = pdf.numPages;
+          
+          if (!newThumbnails.has(fileKey)) {
+            const firstPageThumb = await renderPageThumbnail(pdf, 1, 0.2);
+            newThumbnails.set(fileKey, firstPageThumb);
+          }
+          
+          for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+            const pageId = `${fileKey}-page-${pageNum}`;
+            
+            let thumbnail: string | null = null;
+            if (mode === "page" || pageNum === 1) {
+              thumbnail = await renderPageThumbnail(pdf, pageNum);
+            }
+            
+            allPages.push({
+              id: pageId,
+              fileIndex: fIndex,
+              fileName: file.name,
+              pageNumber: pageNum,
+              thumbnail,
+            });
+          }
+          
+          pdf.destroy();
+        }
+        
+        setPages(allPages);
+        setFileThumbnails(newThumbnails);
+        processedFilesRef.current = currentFileKeys;
+      } catch (error) {
+        console.error("Error processing PDFs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    processFiles();
+  }, [files, mode, renderPageThumbnail, fileThumbnails]);
+
+  const getFilePageCount = (fileIndex: number) => {
+    return pages.filter(p => p.fileIndex === fileIndex).length;
+  };
+
+  const getFileThumbnail = (file: File, index: number) => {
+    const fileKey = `${file.name}-${file.size}-${index}`;
+    return fileThumbnails.get(fileKey);
+  };
+
+  if (loading && pages.length === 0) {
+    return (
+      <div className="w-full max-w-4xl flex flex-col items-center justify-center py-16 space-y-4">
+        <Loader2 className="w-12 h-12 animate-spin text-primary" />
+        <p className="text-muted-foreground">Reading PDF pages...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-4xl">
@@ -65,29 +165,43 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
 
       {mode === "file" ? (
         <Reorder.Group axis="y" values={files} onReorder={onReorder} className="space-y-3">
-          {files.map((file) => (
-            <Reorder.Item key={file.name} value={file}>
+          {files.map((file, index) => (
+            <Reorder.Item key={`${file.name}-${file.size}-${index}`} value={file}>
               <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
                 <div className="text-slate-400">
                   <GripVertical size={20} />
                 </div>
                 
-                <div className="w-12 h-16 bg-red-50 border border-red-100 rounded flex items-center justify-center text-red-500 shadow-sm relative overflow-hidden">
-                  <FileText size={24} />
-                  <div className="absolute top-0 right-0 w-0 h-0 border-t-[12px] border-r-[12px] border-t-transparent border-r-red-200" />
+                <div className="w-12 h-16 bg-slate-50 border rounded flex items-center justify-center text-red-500 shadow-sm relative overflow-hidden">
+                  {getFileThumbnail(file, index) ? (
+                    <img 
+                      src={getFileThumbnail(file, index)} 
+                      alt="PDF preview" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <FileText size={24} />
+                  )}
                 </div>
                 
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate text-slate-700">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                    {getFilePageCount(index) > 0 && (
+                      <span className="ml-2 text-primary font-medium">
+                        • {getFilePageCount(index)} page{getFilePageCount(index) !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </p>
                 </div>
 
                 <Button 
                   variant="ghost" 
                   size="icon" 
                   onClick={(e) => {
-                    e.stopPropagation(); // Prevent drag start
-                    onRemove(files.indexOf(file));
+                    e.stopPropagation();
+                    onRemove(index);
                   }}
                   className="text-slate-400 hover:text-destructive hover:bg-red-50"
                 >
@@ -99,64 +213,71 @@ export function MergeEditor({ files, onReorder, onRemove }: MergeEditorProps) {
         </Reorder.Group>
       ) : (
         <div className="bg-slate-100/50 p-6 rounded-2xl border-2 border-dashed border-slate-200">
-          <Reorder.Group 
-              axis="y" 
-              values={pages} 
-              onReorder={setPages} 
-              className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4"
-              as="ul"
-          >
-            {pages.map((page) => (
-              <Reorder.Item 
-                  key={page.id} 
-                  value={page}
-                  className="relative group cursor-grab active:cursor-grabbing"
-              >
-                 <div className="bg-white border-2 border-slate-100 rounded-lg p-3 hover:border-primary hover:shadow-lg transition-all aspect-[3/4] flex flex-col items-center gap-2 group-active:scale-105">
-                    
-                    {/* Mock Page Content */}
-                    <div className="flex-1 w-full bg-slate-50 rounded border border-dashed border-slate-200 flex flex-col items-center justify-center relative overflow-hidden">
-                       <div className="absolute inset-0 flex flex-col gap-2 p-2 opacity-10">
-                           <div className="h-1.5 w-full bg-slate-900 rounded-full" />
-                           <div className="h-1.5 w-3/4 bg-slate-900 rounded-full" />
-                           <div className="h-1.5 w-full bg-slate-900 rounded-full" />
-                           <div className="h-1.5 w-full bg-slate-900 rounded-full" />
-                           <div className="h-1.5 w-5/6 bg-slate-900 rounded-full" />
-                           <div className="h-1.5 w-full bg-slate-900 rounded-full" />
-                       </div>
-                       <span className="font-display font-bold text-3xl text-slate-200 select-none">{page.pageNumber}</span>
-                    </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8 gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="text-muted-foreground">Rendering page thumbnails...</span>
+            </div>
+          ) : (
+            <Reorder.Group 
+                axis="y" 
+                values={pages} 
+                onReorder={setPages} 
+                className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4"
+                as="ul"
+            >
+              {pages.map((page) => (
+                <Reorder.Item 
+                    key={page.id} 
+                    value={page}
+                    className="relative group cursor-grab active:cursor-grabbing"
+                >
+                   <div className="bg-white border-2 border-slate-100 rounded-lg p-2 hover:border-primary hover:shadow-lg transition-all flex flex-col items-center gap-2 group-active:scale-105">
+                      
+                      <div className="w-full aspect-[3/4] bg-slate-50 rounded border overflow-hidden flex items-center justify-center">
+                        {page.thumbnail ? (
+                          <img 
+                            src={page.thumbnail} 
+                            alt={`Page ${page.pageNumber}`}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-slate-300">
+                            <FileText size={32} />
+                            <span className="text-xs mt-1">Page {page.pageNumber}</span>
+                          </div>
+                        )}
+                      </div>
 
-                    <div className="w-full flex flex-col items-center">
-                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        Page {page.pageNumber}
+                      <div className="w-full flex flex-col items-center px-1">
+                        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                          Page {page.pageNumber}
+                        </div>
+                        <div className="text-[9px] text-center font-medium truncate w-full text-slate-400">
+                          {page.fileName}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-center font-medium truncate w-full text-slate-500 px-1">
-                        {page.fileName}
+                      
+                      <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/5 rounded-lg transition-colors pointer-events-none" />
+                      
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="h-6 w-6 rounded-full shadow-sm"
+                          onClick={(e) => {
+                             e.stopPropagation();
+                             setPages(pages.filter(p => p.id !== page.id));
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </Button>
                       </div>
-                    </div>
-                    
-                    {/* Hover Overlay */}
-                    <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/5 rounded-lg transition-colors pointer-events-none" />
-                    
-                    {/* Delete Button */}
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity scale-90 hover:scale-100">
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="h-6 w-6 rounded-full shadow-sm"
-                        onClick={(e) => {
-                           e.stopPropagation(); // Prevent drag start
-                           setPages(pages.filter(p => p.id !== page.id));
-                        }}
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                 </div>
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
+                   </div>
+                </Reorder.Item>
+              ))}
+            </Reorder.Group>
+          )}
           <p className="text-center text-sm text-muted-foreground mt-6">
             Drag pages to reorder them individually.
           </p>
