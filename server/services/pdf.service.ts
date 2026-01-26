@@ -272,49 +272,128 @@ export class PDFService {
   async addPageNumbers(
     inputPath: string, 
     outputPath: string, 
-    position: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' = 'bottom-center',
-    startFrom: number = 1
+    options: {
+      position?: string;
+      startNumber?: number;
+      startPage?: number;
+      endPage?: number | null;
+      marginX?: number;
+      marginY?: number;
+      fontSize?: number;
+      font?: string;
+      color?: string;
+      isBold?: boolean;
+      isItalic?: boolean;
+      format?: string;
+    } = {}
   ): Promise<void> {
+    const {
+      position = 'bottom-center',
+      startNumber = 1,
+      startPage = 1,
+      endPage = null,
+      marginX = 40,
+      marginY = 30,
+      fontSize = 12,
+      font: fontName = 'Helvetica',
+      color = '#000000',
+      isBold = false,
+      format = 'number'
+    } = options;
+
     const pdfBytes = await fs.readFile(inputPath);
     const pdf = await PDFDocument.load(pdfBytes);
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    
+    let embeddedFont;
+    if (fontName === 'Times-Roman') {
+      embeddedFont = await pdf.embedFont(isBold ? StandardFonts.TimesRomanBold : StandardFonts.TimesRoman);
+    } else if (fontName === 'Courier') {
+      embeddedFont = await pdf.embedFont(isBold ? StandardFonts.CourierBold : StandardFonts.Courier);
+    } else {
+      embeddedFont = await pdf.embedFont(isBold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
+    }
+    
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16) / 255,
+        g: parseInt(result[2], 16) / 255,
+        b: parseInt(result[3], 16) / 255
+      } : { r: 0, g: 0, b: 0 };
+    };
+
+    const toRoman = (num: number): string => {
+      const romanNumerals = [
+        { value: 1000, numeral: 'M' }, { value: 900, numeral: 'CM' },
+        { value: 500, numeral: 'D' }, { value: 400, numeral: 'CD' },
+        { value: 100, numeral: 'C' }, { value: 90, numeral: 'XC' },
+        { value: 50, numeral: 'L' }, { value: 40, numeral: 'XL' },
+        { value: 10, numeral: 'X' }, { value: 9, numeral: 'IX' },
+        { value: 5, numeral: 'V' }, { value: 4, numeral: 'IV' },
+        { value: 1, numeral: 'I' }
+      ];
+      let result = '';
+      for (const { value, numeral } of romanNumerals) {
+        while (num >= value) { result += numeral; num -= value; }
+      }
+      return result.toLowerCase();
+    };
+
+    const toLetter = (num: number): string => {
+      let result = '';
+      while (num > 0) {
+        num--;
+        result = String.fromCharCode(65 + (num % 26)) + result;
+        num = Math.floor(num / 26);
+      }
+      return result.toLowerCase();
+    };
     
     const pages = pdf.getPages();
+    const totalPages = pages.length;
+    const lastPage = endPage !== null ? Math.min(endPage, totalPages) : totalPages;
+    
     pages.forEach((page, idx) => {
+      const pageNum = idx + 1;
+      if (pageNum < startPage || pageNum > lastPage) return;
+      
       const { width, height } = page.getSize();
-      const pageNumber = `${idx + startFrom}`;
-      const textWidth = font.widthOfTextAtSize(pageNumber, 12);
+      const displayNum = startNumber + (pageNum - startPage);
       
-      let x: number, y: number;
-      const margin = 30;
-      
-      switch (position) {
-        case 'top-left':
-          x = margin; y = height - margin;
-          break;
-        case 'top-center':
-          x = (width - textWidth) / 2; y = height - margin;
-          break;
-        case 'top-right':
-          x = width - textWidth - margin; y = height - margin;
-          break;
-        case 'bottom-left':
-          x = margin; y = margin;
-          break;
-        case 'bottom-right':
-          x = width - textWidth - margin; y = margin;
-          break;
-        case 'bottom-center':
-        default:
-          x = (width - textWidth) / 2; y = margin;
-          break;
+      let pageNumberText: string;
+      switch (format) {
+        case 'roman': pageNumberText = toRoman(displayNum); break;
+        case 'letter': pageNumberText = toLetter(displayNum); break;
+        case 'page-of': pageNumberText = `Page ${displayNum} of ${lastPage - startPage + startNumber}`; break;
+        default: pageNumberText = displayNum.toString();
       }
       
-      page.drawText(pageNumber, {
+      const textWidth = embeddedFont.widthOfTextAtSize(pageNumberText, fontSize);
+      
+      let x: number, y: number;
+      const positionParts = position.split('-');
+      const vertical = positionParts[0];
+      const horizontal = positionParts[1] || 'center';
+      
+      switch (horizontal) {
+        case 'left': x = marginX; break;
+        case 'right': x = width - textWidth - marginX; break;
+        default: x = (width - textWidth) / 2;
+      }
+      
+      switch (vertical) {
+        case 'top': y = height - marginY; break;
+        case 'middle': y = height / 2; break;
+        default: y = marginY;
+      }
+      
+      const textColor = hexToRgb(color);
+      
+      page.drawText(pageNumberText, {
         x, y,
-        size: 12,
-        font,
-        color: rgb(0, 0, 0),
+        size: fontSize,
+        font: embeddedFont,
+        color: rgb(textColor.r, textColor.g, textColor.b),
       });
     });
     

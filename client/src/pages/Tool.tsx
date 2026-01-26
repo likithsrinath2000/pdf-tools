@@ -166,7 +166,12 @@ export default function ToolPage() {
     }
 
     if (tool.id === "add-page-numbers") {
-       return <PageNumberEditor files={files} />;
+       return (
+         <PageNumberEditor 
+           files={files} 
+           onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+         />
+       );
     }
 
     if (tool.id === "protect-pdf") {

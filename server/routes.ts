@@ -340,7 +340,20 @@ async function processJobAsync(
         break;
 
       case "add-page-numbers":
-        await pdfService.addPageNumbers(inputFiles[0].path, outputPath, options.position || 'bottom-center', options.startFrom || 1);
+        await pdfService.addPageNumbers(inputFiles[0].path, outputPath, {
+          position: options.position || 'bottom-center',
+          startNumber: options.startNumber || 1,
+          startPage: options.startPage || 1,
+          endPage: options.endPage || null,
+          marginX: options.marginX || 40,
+          marginY: options.marginY || 30,
+          fontSize: options.fontSize || 12,
+          font: options.font || 'Helvetica',
+          color: options.color || '#000000',
+          isBold: options.isBold || false,
+          isItalic: options.isItalic || false,
+          format: options.format || 'number'
+        });
         break;
 
       case "add-watermark":
