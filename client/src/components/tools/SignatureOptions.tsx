@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PenTool, Type, RotateCcw, Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { PenTool, Type, RotateCcw, Loader2, ZoomIn, Download, Upload } from "lucide-react";
 
 interface SignatureOptionsProps {
   file?: File;
@@ -67,6 +67,7 @@ export function SignatureOptions({ file, onChange }: SignatureOptionsProps) {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.strokeStyle = penColor;
+        ctx.fillStyle = penColor;
         ctx.lineWidth = penSize;
         ctxRef.current = ctx;
       }
@@ -119,9 +120,12 @@ export function SignatureOptions({ file, onChange }: SignatureOptionsProps) {
     
     const { x, y } = getCoordinates(e);
     ctx.beginPath();
+    ctx.arc(x, y, penSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
     ctx.moveTo(x, y);
     setIsDrawing(true);
-  }, [getCoordinates]);
+  }, [getCoordinates, penSize]);
 
   const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -152,6 +156,43 @@ export function SignatureOptions({ file, onChange }: SignatureOptionsProps) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       setSignatureImage("");
     }
+  }, []);
+
+  const downloadSignature = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (canvas && signatureImage) {
+      const link = document.createElement('a');
+      link.download = 'my-signature.png';
+      link.href = signatureImage;
+      link.click();
+    }
+  }, [signatureImage]);
+
+  const uploadSignatureRef = useRef<HTMLInputElement>(null);
+  
+  const handleSignatureUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = canvasRef.current;
+          const ctx = ctxRef.current;
+          if (canvas && ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const scale = Math.min(canvas.width / img.width, canvas.height / img.height, 1);
+            const x = (canvas.width - img.width * scale) / 2;
+            const y = (canvas.height - img.height * scale) / 2;
+            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+            setSignatureImage(canvas.toDataURL('image/png'));
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = '';
   }, []);
 
   const handlePositionClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -206,6 +247,33 @@ export function SignatureOptions({ file, onChange }: SignatureOptionsProps) {
                   <RotateCcw size={14} className="mr-1" /> Clear
                 </Button>
               </div>
+            </div>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="file"
+                ref={uploadSignatureRef}
+                onChange={handleSignatureUpload}
+                accept="image/*"
+                className="hidden"
+              />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => uploadSignatureRef.current?.click()}
+                className="flex-1"
+              >
+                <Upload size={14} className="mr-1" /> Upload Saved Signature
+              </Button>
+              {signatureImage && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={downloadSignature}
+                  className="flex-1"
+                >
+                  <Download size={14} className="mr-1" /> Save Signature
+                </Button>
+              )}
             </div>
             <div className="bg-white rounded-lg border-2 border-dashed border-slate-300 p-2">
               <canvas
