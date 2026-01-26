@@ -1,197 +1,152 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
-import { pdfService } from "./services/pdf.service";
-import { imageService } from "./services/image.service";
-import { officeService } from "./services/office.service";
+import { storage } from "../storage";
+import { logger, logJobCreated, logJobCompleted, logJobFailed, logToolExecution, logJobProgress, logFileOperation } from "../logger";
+import { jobsProcessed, activeJobs, fileSizeProcessed } from "../metrics";
 import { randomUUID } from "crypto";
-import { logger, logJobCreated, logJobCompleted, logJobFailed, logRequest, logToolExecution, logJobProgress, logFileOperation } from "./logger";
-import { register, httpRequestDuration, jobsProcessed, activeJobs, fileSizeProcessed } from "./metrics";
+import { pdfService } from "../services/pdf.service";
+import { imageService } from "../services/image.service";
+import { officeService } from "../services/office.service";
 
-const upload = multer({ 
+const router = Router();
+const upload = multer({
   dest: 'uploads/',
   limits: {
     fileSize: 100 * 1024 * 1024,
   }
 });
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  
-  app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-      const duration = (Date.now() - start) / 1000;
-      logRequest(req.method, req.path, duration, res.statusCode);
-      httpRequestDuration.observe(
-        { method: req.method, route: req.path, status_code: res.statusCode.toString() },
-        duration
-      );
+/**
+ * @route POST /api/jobs
+ * @description Creates a new processing job for the specified tool
+ * @param {File[]} files - Array of files to process (up to 20)
+ * @param {string} toolId - The ID of the tool to use for processing
+ * @param {string} options - JSON string of tool-specific options
+ * @returns {Object} { jobId: string } - The ID of the created job
+ */
+router.post("/", upload.array('files', 20), async (req, res) => {
+  try {
+    const files = req.files as Express.Multer.File[];
+    const { toolId, options } = req.body;
+
+    const noFileTools = ["create-document", "html-to-pdf", "create-word", "create-excel", "create-powerpoint"];
+    if ((!files || files.length === 0) && !noFileTools.includes(toolId)) {
+      return res.status(400).json({ error: "No files uploaded" });
+    }
+
+    const inputFiles = files ? files.map(f => ({
+      path: f.path,
+      originalName: f.originalname,
+      size: f.size,
+      mimetype: f.mimetype,
+    })) : [];
+
+    const parsedOptions = options ? JSON.parse(options) : {};
+
+    const job = await storage.createJob({
+      toolId,
+      status: "processing",
+      progress: 0,
+      inputFiles: inputFiles as any,
+      options: parsedOptions as any,
     });
-    next();
-  });
 
-  app.get("/api/health", async (req, res) => {
-    try {
-      const dbCheck = await storage.getRecentJobs(1);
-      res.json({ 
-        status: "ok", 
-        timestamp: new Date().toISOString(),
-        database: "connected",
-        uptime: process.uptime()
-      });
-    } catch (error) {
-      res.status(503).json({ 
-        status: "error", 
-        timestamp: new Date().toISOString(),
-        database: "disconnected"
-      });
+    logJobCreated(job.id, toolId, files?.length || 0, parsedOptions);
+    activeJobs.inc();
+    
+    const totalSize = files?.reduce((sum, f) => sum + f.size, 0) || 0;
+    fileSizeProcessed.observe({ tool_id: toolId }, totalSize);
+    
+    logger.debug(`Job ${job.id} queued with options: ${JSON.stringify(parsedOptions)}`);
+
+    processJobAsync(job.id, toolId, inputFiles, parsedOptions).catch(err => {
+      logger.error(`Unhandled error in job ${job.id}:`, err);
+    });
+
+    res.json({ jobId: job.id });
+  } catch (error: any) {
+    console.error("Error creating job:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @route GET /api/jobs/:jobId
+ * @description Retrieves the status and details of a specific job
+ * @param {string} jobId - The ID of the job to retrieve
+ * @returns {Object} The job object with status, progress, and output information
+ */
+router.get("/:jobId", async (req, res) => {
+  try {
+    const job = await storage.getJob(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
     }
-  });
+    res.json(job);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  app.get("/api/metrics", async (req, res) => {
-    res.set('Content-Type', register.contentType);
-    res.end(await register.metrics());
-  });
-
-  app.post("/api/check-pdf-encrypted", upload.single('file'), async (req, res) => {
-    try {
-      const file = req.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const isEncrypted = await pdfService.isPDFEncrypted(file.path);
-      
-      await fs.unlink(file.path).catch(() => {});
-      
-      res.json({ isEncrypted });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to check PDF" });
+/**
+ * @route GET /api/jobs/:jobId/download
+ * @description Downloads the output file of a completed job
+ * @param {string} jobId - The ID of the job whose output to download
+ * @returns {File} The processed output file
+ */
+router.get("/:jobId/download", async (req, res) => {
+  try {
+    const job = await storage.getJob(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
     }
-  });
 
-  app.post("/api/pdf-preview", upload.single('file'), async (req, res) => {
-    try {
-      const file = req.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const previewData = await pdfService.getPDFPreview(file.path);
-      
-      await fs.unlink(file.path).catch(() => {});
-      
-      res.json(previewData);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to generate preview" });
+    if (job.status !== "completed" || !job.outputFile) {
+      return res.status(400).json({ error: "Job not completed or no output file" });
     }
-  });
 
-  app.post("/api/jobs", upload.array('files', 20), async (req, res) => {
-    try {
-      const files = req.files as Express.Multer.File[];
-      const { toolId, options } = req.body;
+    res.download(job.outputFile, path.basename(job.outputFile));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-      const noFileTools = ["create-document", "html-to-pdf", "create-word", "create-excel", "create-powerpoint"];
-      if ((!files || files.length === 0) && !noFileTools.includes(toolId)) {
-        return res.status(400).json({ error: "No files uploaded" });
-      }
-
-      const inputFiles = files ? files.map(f => ({
-        path: f.path,
-        originalName: f.originalname,
-        size: f.size,
-        mimetype: f.mimetype,
-      })) : [];
-
-      const parsedOptions = options ? JSON.parse(options) : {};
-
-      const job = await storage.createJob({
-        toolId,
-        status: "processing",
-        progress: 0,
-        inputFiles: inputFiles as any,
-        options: parsedOptions as any,
-      });
-
-      logJobCreated(job.id, toolId, files.length, parsedOptions);
-      activeJobs.inc();
-      
-      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-      fileSizeProcessed.observe({ tool_id: toolId }, totalSize);
-      
-      logger.debug(`Job ${job.id} queued with options: ${JSON.stringify(parsedOptions)}`);
-
-      processJobAsync(job.id, toolId, inputFiles, parsedOptions).catch(err => {
-        logger.error(`Unhandled error in job ${job.id}:`, err);
-      });
-
-      res.json({ jobId: job.id });
-    } catch (error: any) {
-      console.error("Error creating job:", error);
-      res.status(500).json({ error: error.message });
+/**
+ * @route DELETE /api/jobs/:jobId
+ * @description Deletes a job and its associated input/output files
+ * @param {string} jobId - The ID of the job to delete
+ * @returns {Object} { success: boolean }
+ */
+router.delete("/:jobId", async (req, res) => {
+  try {
+    const job = await storage.getJob(req.params.jobId);
+    if (job && job.outputFile) {
+      await fs.unlink(job.outputFile).catch(() => {});
     }
-  });
-
-  app.get("/api/jobs/:jobId", async (req, res) => {
-    try {
-      const job = await storage.getJob(req.params.jobId);
-      if (!job) {
-        return res.status(404).json({ error: "Job not found" });
+    
+    const files = job?.inputFiles as any[];
+    if (files) {
+      for (const file of files) {
+        await fs.unlink(file.path).catch(() => {});
       }
-      res.json(job);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
     }
-  });
 
-  app.get("/api/jobs/:jobId/download", async (req, res) => {
-    try {
-      const job = await storage.getJob(req.params.jobId);
-      if (!job) {
-        return res.status(404).json({ error: "Job not found" });
-      }
+    await storage.deleteJob(req.params.jobId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-      if (job.status !== "completed" || !job.outputFile) {
-        return res.status(400).json({ error: "Job not completed or no output file" });
-      }
-
-      res.download(job.outputFile, path.basename(job.outputFile));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/jobs/:jobId", async (req, res) => {
-    try {
-      const job = await storage.getJob(req.params.jobId);
-      if (job && job.outputFile) {
-        await fs.unlink(job.outputFile).catch(() => {});
-      }
-      
-      const files = job?.inputFiles as any[];
-      if (files) {
-        for (const file of files) {
-          await fs.unlink(file.path).catch(() => {});
-        }
-      }
-
-      await storage.deleteJob(req.params.jobId);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  return httpServer;
-}
-
+/**
+ * Processes a job asynchronously based on the tool type
+ * @param jobId - The ID of the job being processed
+ * @param toolId - The ID of the tool to use
+ * @param inputFiles - Array of input file information
+ * @param options - Tool-specific processing options
+ */
 async function processJobAsync(
   jobId: string,
   toolId: string,
@@ -217,6 +172,7 @@ async function processJobAsync(
     await storage.updateJobStatus(jobId, "processing", 30);
 
     switch (toolId) {
+      // PDF Processing Tools
       case "merge-pdf":
         await pdfService.mergePDFs(inputFiles.map(f => f.path), outputPath, options.pageOrder);
         break;
@@ -310,84 +266,12 @@ async function processJobAsync(
         await fs.writeFile(outputPath.replace('.pdf', '.zip'), zipJpgBuffer);
         break;
 
-      case "word-to-pdf":
-      case "powerpoint-to-pdf":
-      case "excel-to-pdf":
-        await officeService.convertToPDF(inputFiles[0].path, outputPath);
-        break;
-
-      case "pdf-to-word":
-        await officeService.pdfToWord(inputFiles[0].path, outputPath);
-        break;
-
-      case "pdf-to-powerpoint":
-        await officeService.pdfToPowerPoint(inputFiles[0].path, outputPath);
-        break;
-
-      case "pdf-to-excel":
-        await officeService.pdfToExcel(inputFiles[0].path, outputPath);
-        break;
-
-      case "html-to-pdf":
-        await officeService.htmlToPDF(options.htmlContent || '', outputPath);
-        break;
-
-      case "create-document":
-        await officeService.htmlToPDF(options.content || '<p>Empty document</p>', outputPath);
-        break;
-
-      case "create-word":
-        const wordContent = officeService['extractTextFromHtml'](options.wordContent || 'Empty document');
-        await officeService.createWordDocument(wordContent, outputPath);
-        break;
-
-      case "create-excel":
-        await officeService.createExcelDocument(options.excelData || { headers: [], rows: [] }, outputPath);
-        break;
-
-      case "create-powerpoint":
-        await officeService.createPowerPointDocument(options.slides || [{ title: 'Slide 1', content: 'Content' }], outputPath);
-        break;
-
       case "protect-pdf":
         await pdfService.protectPDF(inputFiles[0].path, outputPath, options.password || 'password123');
         break;
 
       case "unlock-pdf":
         await pdfService.unlockPDF(inputFiles[0].path, outputPath, options.password || '');
-        break;
-
-      case "compress-image":
-        await imageService.compressImage(inputFiles[0].path, outputPath, options.quality || 80);
-        break;
-
-      case "resize-image":
-        await imageService.resizeImage(
-          inputFiles[0].path,
-          outputPath,
-          options.width,
-          options.height,
-          options.maintainAspectRatio !== false
-        );
-        break;
-
-      case "crop-image":
-        await imageService.cropImage(
-          inputFiles[0].path,
-          outputPath,
-          options.left || 0,
-          options.top || 0,
-          options.width || 100,
-          options.height || 100
-        );
-        break;
-
-      case "rotate-image":
-        await imageService.rotateImage(inputFiles[0].path, outputPath, options.angle || 90);
-        break;
-
-      case "convert-image":
-        await imageService.convertImageFormat(inputFiles[0].path, outputPath, options.format || 'jpg');
         break;
 
       case "rotate-pdf":
@@ -466,6 +350,80 @@ async function processJobAsync(
         await fs.writeFile(outputPath.replace('.pdf', '.zip'), zipExtractBuffer);
         break;
 
+      // Image Processing Tools
+      case "compress-image":
+        await imageService.compressImage(inputFiles[0].path, outputPath, options.quality || 80);
+        break;
+
+      case "resize-image":
+        await imageService.resizeImage(
+          inputFiles[0].path,
+          outputPath,
+          options.width,
+          options.height,
+          options.maintainAspectRatio !== false
+        );
+        break;
+
+      case "crop-image":
+        await imageService.cropImage(
+          inputFiles[0].path,
+          outputPath,
+          options.left || 0,
+          options.top || 0,
+          options.width || 100,
+          options.height || 100
+        );
+        break;
+
+      case "rotate-image":
+        await imageService.rotateImage(inputFiles[0].path, outputPath, options.angle || 90);
+        break;
+
+      case "convert-image":
+        await imageService.convertImageFormat(inputFiles[0].path, outputPath, options.format || 'jpg');
+        break;
+
+      // Office Document Tools
+      case "word-to-pdf":
+      case "powerpoint-to-pdf":
+      case "excel-to-pdf":
+        await officeService.convertToPDF(inputFiles[0].path, outputPath);
+        break;
+
+      case "pdf-to-word":
+        await officeService.pdfToWord(inputFiles[0].path, outputPath);
+        break;
+
+      case "pdf-to-powerpoint":
+        await officeService.pdfToPowerPoint(inputFiles[0].path, outputPath);
+        break;
+
+      case "pdf-to-excel":
+        await officeService.pdfToExcel(inputFiles[0].path, outputPath);
+        break;
+
+      case "html-to-pdf":
+        await officeService.htmlToPDF(options.htmlContent || '', outputPath);
+        break;
+
+      case "create-document":
+        await officeService.htmlToPDF(options.content || '<p>Empty document</p>', outputPath);
+        break;
+
+      case "create-word":
+        const wordContent = (officeService as any).extractTextFromHtml(options.wordContent || 'Empty document');
+        await officeService.createWordDocument(wordContent, outputPath);
+        break;
+
+      case "create-excel":
+        await officeService.createExcelDocument(options.excelData || { headers: [], rows: [] }, outputPath);
+        break;
+
+      case "create-powerpoint":
+        await officeService.createPowerPointDocument(options.slides || [{ title: 'Slide 1', content: 'Content' }], outputPath);
+        break;
+
       default:
         throw new Error(`Unknown tool: ${toolId}`);
     }
@@ -473,7 +431,7 @@ async function processJobAsync(
     logJobProgress(jobId, toolId, 90, 'finalizing');
     await storage.updateJobStatus(jobId, "processing", 90);
 
-    const actualOutput = toolId === 'split-pdf' || toolId === 'pdf-to-jpg'
+    const actualOutput = toolId === 'split-pdf' || toolId === 'pdf-to-jpg' || toolId === 'extract-images'
       ? outputPath.replace(path.extname(outputPath), '.zip')
       : outputPath;
 
@@ -510,6 +468,11 @@ async function processJobAsync(
   }
 }
 
+/**
+ * Parses a range string into an array of start/end range objects
+ * @param rangeStr - A string like "1-3, 5, 7-10"
+ * @returns Array of range objects
+ */
 function parseRanges(rangeStr: string): { start: number; end: number }[] {
   const ranges: { start: number; end: number }[] = [];
   const parts = rangeStr.split(',').map(p => p.trim()).filter(Boolean);
@@ -533,6 +496,11 @@ function parseRanges(rangeStr: string): { start: number; end: number }[] {
   return ranges.length > 0 ? ranges : [{ start: 1, end: 2 }];
 }
 
+/**
+ * Gets the appropriate file extension for a given tool's output
+ * @param toolId - The ID of the processing tool
+ * @returns The file extension including the dot (e.g., ".pdf")
+ */
 function getOutputExtension(toolId: string): string {
   const extensionMap: Record<string, string> = {
     "merge-pdf": ".pdf",
@@ -574,3 +542,5 @@ function getOutputExtension(toolId: string): string {
   };
   return extensionMap[toolId] || ".pdf";
 }
+
+export default router;
