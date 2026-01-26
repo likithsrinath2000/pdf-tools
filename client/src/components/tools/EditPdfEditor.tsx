@@ -24,7 +24,9 @@ import {
   Move,
   Loader2,
   Palette,
-  Copy
+  Copy,
+  Scissors,
+  Clipboard
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -38,11 +40,11 @@ interface EditPdfEditorProps {
   onOptionsChange: (options: any) => void;
 }
 
-type ToolType = "select" | "text" | "rectangle" | "circle" | "line" | "highlight" | "freehand";
+type ToolType = "select" | "text" | "rectangle" | "circle" | "line" | "highlight" | "freehand" | "snip";
 
 interface Annotation {
   id: string;
-  type: ToolType;
+  type: ToolType | "image";
   page: number;
   x: number;
   y: number;
@@ -57,6 +59,7 @@ interface Annotation {
   points?: { x: number; y: number }[];
   endX?: number;
   endY?: number;
+  imageData?: string;
 }
 
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | null;
@@ -102,9 +105,14 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [colorPickerTarget, setColorPickerTarget] = useState<"stroke" | "fill">("stroke");
   const [customColor, setCustomColor] = useState("#ff0000");
+  const [clipboard, setClipboard] = useState<string | null>(null);
+  const [snipSelection, setSnipSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [isSnipping, setIsSnipping] = useState(false);
+  const [snipStart, setSnipStart] = useState<{ x: number; y: number } | null>(null);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const onOptionsChangeRef = useRef(onOptionsChange);
   const initializedRef = useRef(false);
 
@@ -211,7 +219,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   };
 
   const handleCanvasClick = (e: React.MouseEvent) => {
-    if (isDragging || resizeHandle) return;
+    if (isDragging || resizeHandle || isSnipping) return;
     
     const pos = getRelativePosition(e);
 
@@ -237,6 +245,13 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const handleMouseDown = (e: React.MouseEvent) => {
     const pos = getRelativePosition(e);
 
+    if (selectedTool === "snip") {
+      setIsSnipping(true);
+      setSnipStart(pos);
+      setSnipSelection(null);
+      return;
+    }
+
     if (selectedTool === "select" && selectedId) {
       const selected = annotations.find(a => a.id === selectedId);
       if (selected && selected.page === currentPage) {
@@ -256,7 +271,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       }
     }
 
-    if (selectedTool !== "select" && selectedTool !== "text") {
+    if (selectedTool !== "select" && selectedTool !== "text" && selectedTool !== "snip") {
       setIsDrawing(true);
       setDrawStart(pos);
       
@@ -332,9 +347,63 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       return;
     }
 
+    if (isSnipping && snipStart) {
+      const x = Math.min(snipStart.x, pos.x);
+      const y = Math.min(snipStart.y, pos.y);
+      const width = Math.abs(pos.x - snipStart.x);
+      const height = Math.abs(pos.y - snipStart.y);
+      setSnipSelection({ x, y, width, height });
+      return;
+    }
+
     if (isDrawing && selectedTool === "freehand") {
       setCurrentPoints(prev => [...prev, pos]);
     }
+  };
+
+  const captureSnipSelection = () => {
+    if (!snipSelection || !imageRef.current || !pageImage) return;
+    
+    const img = imageRef.current;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+    
+    const scaleX = img.naturalWidth / img.clientWidth;
+    const scaleY = img.naturalHeight / img.clientHeight;
+    
+    const sx = snipSelection.x * scaleX;
+    const sy = snipSelection.y * scaleY;
+    const sw = snipSelection.width * scaleX;
+    const sh = snipSelection.height * scaleY;
+    
+    canvas.width = sw;
+    canvas.height = sh;
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    
+    const imageData = canvas.toDataURL("image/png");
+    setClipboard(imageData);
+    setSnipSelection(null);
+    setIsSnipping(false);
+    setSnipStart(null);
+  };
+
+  const pasteClipboard = () => {
+    if (!clipboard) return;
+    
+    const newAnnotation: Annotation = {
+      id: `ann-${Date.now()}`,
+      type: "image",
+      page: currentPage,
+      x: 50,
+      y: 50,
+      width: 150,
+      height: 150,
+      color: "transparent",
+      imageData: clipboard,
+    };
+    
+    setAnnotations(prev => [...prev, newAnnotation]);
+    setSelectedId(newAnnotation.id);
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
@@ -346,6 +415,19 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     if (resizeHandle) {
       setResizeHandle(null);
       setResizeStart(null);
+      return;
+    }
+
+    if (isSnipping && snipStart) {
+      const pos = getRelativePosition(e);
+      const x = Math.min(snipStart.x, pos.x);
+      const y = Math.min(snipStart.y, pos.y);
+      const width = Math.abs(pos.x - snipStart.x);
+      const height = Math.abs(pos.y - snipStart.y);
+      if (width > 10 && height > 10) {
+        setSnipSelection({ x, y, width, height });
+      }
+      setIsSnipping(false);
       return;
     }
 
@@ -463,6 +545,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
 
   const tools: { id: ToolType; icon: any; label: string }[] = [
     { id: "select", icon: Move, label: "Select" },
+    { id: "snip", icon: Scissors, label: "Snip" },
     { id: "text", icon: Type, label: "Text" },
     { id: "rectangle", icon: Square, label: "Rect" },
     { id: "circle", icon: Circle, label: "Circle" },
@@ -558,6 +641,30 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                 Delete
               </Button>
             </>
+          )}
+
+          {snipSelection && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={captureSnipSelection}
+              data-testid="capture-snip-btn"
+            >
+              <Scissors className="h-4 w-4 mr-1" />
+              Copy Selection
+            </Button>
+          )}
+
+          {clipboard && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={pasteClipboard}
+              data-testid="paste-btn"
+            >
+              <Clipboard className="h-4 w-4 mr-1" />
+              Paste
+            </Button>
           )}
         </div>
 
@@ -781,7 +888,14 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
           }}
         >
           {pageImage ? (
-            <img src={pageImage} alt={`Page ${currentPage}`} className="max-w-full select-none" draggable={false} />
+            <img 
+              ref={imageRef}
+              src={pageImage} 
+              alt={`Page ${currentPage}`} 
+              className="max-w-full select-none" 
+              draggable={false} 
+              crossOrigin="anonymous"
+            />
           ) : (
             <div className="w-96 h-64 flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -920,8 +1034,49 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                 );
               }
 
+              if (ann.type === "image" && ann.imageData) {
+                return (
+                  <g key={ann.id}>
+                    <image
+                      href={ann.imageData}
+                      x={ann.x}
+                      y={ann.y}
+                      width={ann.width}
+                      height={ann.height}
+                      preserveAspectRatio="none"
+                    />
+                    {isSelected && (
+                      <rect
+                        x={ann.x - 2}
+                        y={ann.y - 2}
+                        width={ann.width + 4}
+                        height={ann.height + 4}
+                        fill="none"
+                        stroke="#0066ff"
+                        strokeWidth={2}
+                        strokeDasharray="5,5"
+                      />
+                    )}
+                    {renderResizeHandles(ann)}
+                  </g>
+                );
+              }
+
               return null;
             })}
+
+            {snipSelection && (
+              <rect
+                x={snipSelection.x}
+                y={snipSelection.y}
+                width={snipSelection.width}
+                height={snipSelection.height}
+                fill="rgba(0, 102, 255, 0.1)"
+                stroke="#0066ff"
+                strokeWidth={2}
+                strokeDasharray="8,4"
+              />
+            )}
 
             {isDrawing && currentPoints.length > 0 && selectedTool === "freehand" && (
               <path
