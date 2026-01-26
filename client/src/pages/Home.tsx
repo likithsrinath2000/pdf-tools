@@ -42,11 +42,23 @@ export default function Home() {
           </div>
         </div>
 
-        {/* All Tools Grid */}
-        <div className="max-w-7xl mx-auto">
+        {/* PDF Tools Grid */}
+        <div className="max-w-7xl mx-auto mb-16">
           <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">All PDF Tools</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {allTools.filter(t => !favorites.includes(t.id)).map((tool, i) => (
+            {allTools.filter(t => !favorites.includes(t.id) && t.category !== "image-tools").map((tool, i) => (
+              <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
+                <ToolCard {...tool} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Image Tools Grid */}
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">Image Tools</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {allTools.filter(t => t.category === "image-tools").map((tool, i) => (
               <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
                 <ToolCard {...tool} />
               </div>

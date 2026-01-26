@@ -54,8 +54,8 @@ export function Navbar() {
         </div>
       </Link>
       
-      {/* Desktop Menu */}
-      <div className="hidden lg:flex items-center gap-1">
+      {/* Desktop Menu - Centered */}
+      <div className="hidden lg:flex absolute left-1/2 transform -translate-x-1/2">
         <NavigationMenu>
           <NavigationMenuList>
             <NavigationMenuItem>
@@ -150,7 +150,10 @@ export function Navbar() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
+      </div>
 
+      {/* Desktop Action Buttons - Right */}
+      <div className="hidden lg:flex items-center gap-1">
         <Link href="/merge-pdf">
            <Button variant="ghost" className={cn("text-sm font-medium hover:bg-red-50 hover:text-red-600", location === "/merge-pdf" && "bg-red-50 text-red-600")}>
              Merge PDF
