@@ -4,6 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { 
   Type, 
   Square, 
   Circle, 
@@ -14,9 +22,9 @@ import {
   ChevronRight,
   Trash2,
   Move,
-  Undo,
-  Redo,
-  Loader2
+  Loader2,
+  Palette,
+  Copy
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -38,15 +46,35 @@ interface Annotation {
   page: number;
   x: number;
   y: number;
-  width?: number;
-  height?: number;
+  width: number;
+  height: number;
   text?: string;
   color: string;
+  fillColor?: string;
+  filled?: boolean;
   fontSize?: number;
+  fontFamily?: string;
   points?: { x: number; y: number }[];
   endX?: number;
   endY?: number;
 }
+
+type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | null;
+
+const FONTS = [
+  { value: "Arial", label: "Arial" },
+  { value: "Times New Roman", label: "Times New Roman" },
+  { value: "Courier New", label: "Courier New" },
+  { value: "Georgia", label: "Georgia" },
+  { value: "Verdana", label: "Verdana" },
+  { value: "Comic Sans MS", label: "Comic Sans" },
+  { value: "Impact", label: "Impact" },
+];
+
+const PRESET_COLORS = [
+  "#ff0000", "#ff6b00", "#ffff00", "#00ff00", "#00ffff", 
+  "#0000ff", "#ff00ff", "#000000", "#666666", "#ffffff"
+];
 
 export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [pageCount, setPageCount] = useState(0);
@@ -56,14 +84,24 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const [selectedTool, setSelectedTool] = useState<ToolType>("select");
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentColor, setCurrentColor] = useState("#ff0000");
-  const [fontSize, setFontSize] = useState(16);
+  const [currentFillColor, setCurrentFillColor] = useState("#ff0000");
+  const [fillEnabled, setFillEnabled] = useState(false);
+  const [fontSize, setFontSize] = useState(24);
+  const [fontFamily, setFontFamily] = useState("Arial");
   const [textInput, setTextInput] = useState("");
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
-  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showTextInput, setShowTextInput] = useState(false);
   const [textPosition, setTextPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [resizeHandle, setResizeHandle] = useState<ResizeHandle>(null);
+  const [resizeStart, setResizeStart] = useState<{ x: number; y: number; ann: Annotation } | null>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [colorPickerTarget, setColorPickerTarget] = useState<"stroke" | "fill">("stroke");
+  const [customColor, setCustomColor] = useState("#ff0000");
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -126,6 +164,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const changePage = (newPage: number) => {
     if (newPage >= 1 && newPage <= pageCount && newPage !== currentPage) {
       setCurrentPage(newPage);
+      setSelectedId(null);
     }
   };
 
@@ -148,7 +187,32 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     };
   };
 
+  const getResizeHandleAtPosition = (ann: Annotation, pos: { x: number; y: number }): ResizeHandle => {
+    const handleSize = 8;
+    const { x, y, width, height } = ann;
+    
+    const handles: { handle: ResizeHandle; hx: number; hy: number }[] = [
+      { handle: "nw", hx: x, hy: y },
+      { handle: "n", hx: x + width / 2, hy: y },
+      { handle: "ne", hx: x + width, hy: y },
+      { handle: "e", hx: x + width, hy: y + height / 2 },
+      { handle: "se", hx: x + width, hy: y + height },
+      { handle: "s", hx: x + width / 2, hy: y + height },
+      { handle: "sw", hx: x, hy: y + height },
+      { handle: "w", hx: x, hy: y + height / 2 },
+    ];
+
+    for (const { handle, hx, hy } of handles) {
+      if (Math.abs(pos.x - hx) <= handleSize && Math.abs(pos.y - hy) <= handleSize) {
+        return handle;
+      }
+    }
+    return null;
+  };
+
   const handleCanvasClick = (e: React.MouseEvent) => {
+    if (isDragging || resizeHandle) return;
+    
     const pos = getRelativePosition(e);
 
     if (selectedTool === "text") {
@@ -158,54 +222,158 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     }
 
     if (selectedTool === "select") {
-      const clicked = annotations.find(
+      const clicked = [...annotations].reverse().find(
         (a) =>
           a.page === currentPage &&
           pos.x >= a.x &&
-          pos.x <= a.x + (a.width || 100) &&
+          pos.x <= a.x + a.width &&
           pos.y >= a.y &&
-          pos.y <= a.y + (a.height || 30)
+          pos.y <= a.y + a.height
       );
-      setSelectedAnnotation(clicked?.id || null);
+      setSelectedId(clicked?.id || null);
     }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (selectedTool === "select" || selectedTool === "text") return;
-    
     const pos = getRelativePosition(e);
-    setIsDrawing(true);
-    setDrawStart(pos);
-    
-    if (selectedTool === "freehand") {
-      setCurrentPoints([pos]);
+
+    if (selectedTool === "select" && selectedId) {
+      const selected = annotations.find(a => a.id === selectedId);
+      if (selected && selected.page === currentPage) {
+        const handle = getResizeHandleAtPosition(selected, pos);
+        if (handle) {
+          setResizeHandle(handle);
+          setResizeStart({ x: pos.x, y: pos.y, ann: { ...selected } });
+          return;
+        }
+        
+        if (pos.x >= selected.x && pos.x <= selected.x + selected.width &&
+            pos.y >= selected.y && pos.y <= selected.y + selected.height) {
+          setIsDragging(true);
+          setDragOffset({ x: pos.x - selected.x, y: pos.y - selected.y });
+          return;
+        }
+      }
+    }
+
+    if (selectedTool !== "select" && selectedTool !== "text") {
+      setIsDrawing(true);
+      setDrawStart(pos);
+      
+      if (selectedTool === "freehand") {
+        setCurrentPoints([pos]);
+      }
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDrawing || !drawStart) return;
-    
     const pos = getRelativePosition(e);
-    
-    if (selectedTool === "freehand") {
+
+    if (isDragging && selectedId) {
+      setAnnotations(prev => prev.map(a => 
+        a.id === selectedId 
+          ? { ...a, x: pos.x - dragOffset.x, y: pos.y - dragOffset.y }
+          : a
+      ));
+      return;
+    }
+
+    if (resizeHandle && resizeStart && selectedId) {
+      const { ann } = resizeStart;
+      let newX = ann.x, newY = ann.y, newWidth = ann.width, newHeight = ann.height;
+      
+      const dx = pos.x - resizeStart.x;
+      const dy = pos.y - resizeStart.y;
+
+      switch (resizeHandle) {
+        case "nw":
+          newX = ann.x + dx;
+          newY = ann.y + dy;
+          newWidth = ann.width - dx;
+          newHeight = ann.height - dy;
+          break;
+        case "n":
+          newY = ann.y + dy;
+          newHeight = ann.height - dy;
+          break;
+        case "ne":
+          newY = ann.y + dy;
+          newWidth = ann.width + dx;
+          newHeight = ann.height - dy;
+          break;
+        case "e":
+          newWidth = ann.width + dx;
+          break;
+        case "se":
+          newWidth = ann.width + dx;
+          newHeight = ann.height + dy;
+          break;
+        case "s":
+          newHeight = ann.height + dy;
+          break;
+        case "sw":
+          newX = ann.x + dx;
+          newWidth = ann.width - dx;
+          newHeight = ann.height + dy;
+          break;
+        case "w":
+          newX = ann.x + dx;
+          newWidth = ann.width - dx;
+          break;
+      }
+
+      if (newWidth > 10 && newHeight > 10) {
+        setAnnotations(prev => prev.map(a => 
+          a.id === selectedId 
+            ? { ...a, x: newX, y: newY, width: newWidth, height: newHeight }
+            : a
+        ));
+      }
+      return;
+    }
+
+    if (isDrawing && selectedTool === "freehand") {
       setCurrentPoints(prev => [...prev, pos]);
     }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    if (isDragging) {
+      setIsDragging(false);
+      return;
+    }
+
+    if (resizeHandle) {
+      setResizeHandle(null);
+      setResizeStart(null);
+      return;
+    }
+
     if (!isDrawing || !drawStart) return;
     
     const pos = getRelativePosition(e);
+    const width = Math.abs(pos.x - drawStart.x);
+    const height = Math.abs(pos.y - drawStart.y);
+    
+    if (width < 5 && height < 5 && selectedTool !== "freehand") {
+      setIsDrawing(false);
+      setDrawStart(null);
+      return;
+    }
+
     const newAnnotation: Annotation = {
       id: `ann-${Date.now()}`,
       type: selectedTool,
       page: currentPage,
       x: Math.min(drawStart.x, pos.x),
       y: Math.min(drawStart.y, pos.y),
-      width: Math.abs(pos.x - drawStart.x),
-      height: Math.abs(pos.y - drawStart.y),
+      width: width || 100,
+      height: height || 50,
       color: currentColor,
+      fillColor: currentFillColor,
+      filled: fillEnabled,
       fontSize,
+      fontFamily,
     };
 
     if (selectedTool === "line") {
@@ -213,12 +381,20 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       newAnnotation.y = drawStart.y;
       newAnnotation.endX = pos.x;
       newAnnotation.endY = pos.y;
+      newAnnotation.width = Math.abs(pos.x - drawStart.x);
+      newAnnotation.height = Math.abs(pos.y - drawStart.y);
     }
 
-    if (selectedTool === "freehand") {
+    if (selectedTool === "freehand" && currentPoints.length > 0) {
+      const minX = Math.min(...currentPoints.map(p => p.x));
+      const maxX = Math.max(...currentPoints.map(p => p.x));
+      const minY = Math.min(...currentPoints.map(p => p.y));
+      const maxY = Math.max(...currentPoints.map(p => p.y));
       newAnnotation.points = currentPoints;
-      newAnnotation.x = 0;
-      newAnnotation.y = 0;
+      newAnnotation.x = minX;
+      newAnnotation.y = minY;
+      newAnnotation.width = maxX - minX || 10;
+      newAnnotation.height = maxY - minY || 10;
     }
 
     setAnnotations(prev => [...prev, newAnnotation]);
@@ -230,6 +406,9 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
   const addTextAnnotation = () => {
     if (!textInput.trim() || !textPosition) return;
 
+    const estWidth = textInput.length * fontSize * 0.6;
+    const estHeight = fontSize * 1.4;
+
     const newAnnotation: Annotation = {
       id: `ann-${Date.now()}`,
       type: "text",
@@ -239,23 +418,48 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       text: textInput,
       color: currentColor,
       fontSize,
-      width: textInput.length * fontSize * 0.6,
-      height: fontSize * 1.2,
+      fontFamily,
+      width: estWidth,
+      height: estHeight,
     };
 
     setAnnotations(prev => [...prev, newAnnotation]);
     setTextInput("");
     setShowTextInput(false);
     setTextPosition(null);
+    setSelectedId(newAnnotation.id);
   };
 
   const deleteSelected = () => {
-    if (!selectedAnnotation) return;
-    setAnnotations(prev => prev.filter((a) => a.id !== selectedAnnotation));
-    setSelectedAnnotation(null);
+    if (!selectedId) return;
+    setAnnotations(prev => prev.filter((a) => a.id !== selectedId));
+    setSelectedId(null);
+  };
+
+  const duplicateSelected = () => {
+    if (!selectedId) return;
+    const original = annotations.find(a => a.id === selectedId);
+    if (!original) return;
+    
+    const newAnn: Annotation = {
+      ...original,
+      id: `ann-${Date.now()}`,
+      x: original.x + 20,
+      y: original.y + 20,
+    };
+    setAnnotations(prev => [...prev, newAnn]);
+    setSelectedId(newAnn.id);
+  };
+
+  const updateSelectedAnnotation = (updates: Partial<Annotation>) => {
+    if (!selectedId) return;
+    setAnnotations(prev => prev.map(a => 
+      a.id === selectedId ? { ...a, ...updates } : a
+    ));
   };
 
   const pageAnnotations = annotations.filter((a) => a.page === currentPage);
+  const selectedAnnotation = annotations.find(a => a.id === selectedId);
 
   const tools: { id: ToolType; icon: any; label: string }[] = [
     { id: "select", icon: Move, label: "Select" },
@@ -266,8 +470,6 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     { id: "highlight", icon: Highlighter, label: "Highlight" },
     { id: "freehand", icon: Pencil, label: "Draw" },
   ];
-
-  const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#000000"];
 
   if (files.length === 0) {
     return (
@@ -286,6 +488,35 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
     );
   }
 
+  const renderResizeHandles = (ann: Annotation) => {
+    if (ann.id !== selectedId || ann.type === "freehand") return null;
+    
+    const handles = [
+      { pos: "nw", x: ann.x, y: ann.y },
+      { pos: "n", x: ann.x + ann.width / 2, y: ann.y },
+      { pos: "ne", x: ann.x + ann.width, y: ann.y },
+      { pos: "e", x: ann.x + ann.width, y: ann.y + ann.height / 2 },
+      { pos: "se", x: ann.x + ann.width, y: ann.y + ann.height },
+      { pos: "s", x: ann.x + ann.width / 2, y: ann.y + ann.height },
+      { pos: "sw", x: ann.x, y: ann.y + ann.height },
+      { pos: "w", x: ann.x, y: ann.y + ann.height / 2 },
+    ];
+
+    return handles.map(({ pos, x, y }) => (
+      <rect
+        key={pos}
+        x={x - 4}
+        y={y - 4}
+        width={8}
+        height={8}
+        fill="white"
+        stroke="#0066ff"
+        strokeWidth={1}
+        style={{ cursor: `${pos}-resize` }}
+      />
+    ));
+  };
+
   return (
     <div className="w-full space-y-4">
       <div className="bg-card rounded-lg border p-4 space-y-4">
@@ -295,7 +526,10 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               key={tool.id}
               variant={selectedTool === tool.id ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedTool(tool.id)}
+              onClick={() => {
+                setSelectedTool(tool.id);
+                if (tool.id !== "select") setSelectedId(null);
+              }}
               data-testid={`tool-${tool.id}`}
             >
               <tool.icon className="h-4 w-4 mr-1" />
@@ -303,50 +537,204 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
             </Button>
           ))}
 
-          {selectedAnnotation && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={deleteSelected}
-              data-testid="delete-annotation"
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Delete
-            </Button>
+          {selectedId && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={duplicateSelected}
+                data-testid="duplicate-btn"
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={deleteSelected}
+                data-testid="delete-annotation"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            </>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Label>Color:</Label>
-            <div className="flex gap-1">
-              {colors.map((color) => (
+            <div className="flex gap-1 items-center">
+              {PRESET_COLORS.slice(0, 6).map((color) => (
                 <button
                   key={color}
-                  className={`w-6 h-6 rounded border-2 ${currentColor === color ? "border-primary" : "border-transparent"}`}
+                  className={`w-6 h-6 rounded border-2 ${currentColor === color ? "border-primary ring-2 ring-primary/50" : "border-gray-300"}`}
                   style={{ backgroundColor: color }}
                   onClick={() => setCurrentColor(color)}
-                  data-testid={`color-${color}`}
                 />
               ))}
+              <div className="relative">
+                <button
+                  className="w-6 h-6 rounded border-2 border-gray-300 flex items-center justify-center"
+                  style={{ background: `linear-gradient(135deg, red, yellow, green, blue, purple)` }}
+                  onClick={() => {
+                    setColorPickerTarget("stroke");
+                    setShowColorPicker(!showColorPicker);
+                  }}
+                >
+                  <Palette className="h-3 w-3 text-white drop-shadow" />
+                </button>
+                {showColorPicker && colorPickerTarget === "stroke" && (
+                  <div className="absolute top-8 left-0 z-50 bg-white p-3 rounded-lg shadow-lg border">
+                    <div className="grid grid-cols-5 gap-1 mb-2">
+                      {PRESET_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          className={`w-6 h-6 rounded border ${currentColor === color ? "ring-2 ring-primary" : ""}`}
+                          style={{ backgroundColor: color }}
+                          onClick={() => {
+                            setCurrentColor(color);
+                            setShowColorPicker(false);
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="color"
+                        value={customColor}
+                        onChange={(e) => setCustomColor(e.target.value)}
+                        className="w-8 h-8 cursor-pointer"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setCurrentColor(customColor);
+                          setShowColorPicker(false);
+                        }}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {(selectedTool === "text" || selectedTool === "highlight") && (
+          {(selectedTool === "rectangle" || selectedTool === "circle") && (
             <div className="flex items-center gap-2">
-              <Label>Size:</Label>
-              <Slider
-                value={[fontSize]}
-                onValueChange={([v]) => setFontSize(v)}
-                min={8}
-                max={72}
-                step={1}
-                className="w-32"
-              />
-              <span className="text-sm w-8">{fontSize}px</span>
+              <Switch checked={fillEnabled} onCheckedChange={setFillEnabled} />
+              <Label>Fill</Label>
+              {fillEnabled && (
+                <input
+                  type="color"
+                  value={currentFillColor}
+                  onChange={(e) => setCurrentFillColor(e.target.value)}
+                  className="w-6 h-6 cursor-pointer rounded"
+                />
+              )}
             </div>
           )}
+
+          {selectedTool === "text" && (
+            <>
+              <div className="flex items-center gap-2">
+                <Label>Font:</Label>
+                <Select value={fontFamily} onValueChange={setFontFamily}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FONTS.map((font) => (
+                      <SelectItem key={font.value} value={font.value}>
+                        <span style={{ fontFamily: font.value }}>{font.label}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label>Size:</Label>
+                <Slider
+                  value={[fontSize]}
+                  onValueChange={([v]) => setFontSize(v)}
+                  min={8}
+                  max={72}
+                  step={1}
+                  className="w-24"
+                />
+                <span className="text-sm w-10">{fontSize}px</span>
+              </div>
+            </>
+          )}
         </div>
+
+        {selectedAnnotation && (
+          <div className="flex flex-wrap items-center gap-4 pt-2 border-t">
+            <span className="text-sm font-medium">Selected: {selectedAnnotation.type}</span>
+            {selectedAnnotation.type === "text" && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Label>Font:</Label>
+                  <Select 
+                    value={selectedAnnotation.fontFamily || "Arial"} 
+                    onValueChange={(v) => updateSelectedAnnotation({ fontFamily: v })}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FONTS.map((font) => (
+                        <SelectItem key={font.value} value={font.value}>
+                          {font.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label>Size:</Label>
+                  <Slider
+                    value={[selectedAnnotation.fontSize || 24]}
+                    onValueChange={([v]) => updateSelectedAnnotation({ fontSize: v })}
+                    min={8}
+                    max={72}
+                    step={1}
+                    className="w-24"
+                  />
+                  <span className="text-sm">{selectedAnnotation.fontSize}px</span>
+                </div>
+              </>
+            )}
+            {(selectedAnnotation.type === "rectangle" || selectedAnnotation.type === "circle") && (
+              <div className="flex items-center gap-2">
+                <Switch 
+                  checked={selectedAnnotation.filled || false} 
+                  onCheckedChange={(v) => updateSelectedAnnotation({ filled: v })}
+                />
+                <Label>Fill</Label>
+                {selectedAnnotation.filled && (
+                  <input
+                    type="color"
+                    value={selectedAnnotation.fillColor || "#ff0000"}
+                    onChange={(e) => updateSelectedAnnotation({ fillColor: e.target.value })}
+                    className="w-6 h-6 cursor-pointer rounded"
+                  />
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Label>Color:</Label>
+              <input
+                type="color"
+                value={selectedAnnotation.color}
+                onChange={(e) => updateSelectedAnnotation({ color: e.target.value })}
+                className="w-6 h-6 cursor-pointer rounded"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-card rounded-lg border p-4">
@@ -356,19 +744,15 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
             size="sm"
             onClick={() => changePage(currentPage - 1)}
             disabled={currentPage === 1}
-            data-testid="prev-page"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm">
-            Page {currentPage} of {pageCount}
-          </span>
+          <span className="text-sm">Page {currentPage} of {pageCount}</span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => changePage(currentPage + 1)}
             disabled={currentPage === pageCount}
-            data-testid="next-page"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -376,8 +760,12 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
 
         <div
           ref={canvasRef}
-          className="relative bg-gray-100 rounded overflow-hidden cursor-crosshair mx-auto"
-          style={{ maxWidth: "100%", width: "fit-content" }}
+          className="relative bg-gray-100 rounded overflow-hidden mx-auto"
+          style={{ 
+            maxWidth: "100%", 
+            width: "fit-content",
+            cursor: selectedTool === "select" ? "default" : "crosshair"
+          }}
           onClick={handleCanvasClick}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -388,10 +776,12 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
               setDrawStart(null);
               setCurrentPoints([]);
             }
+            setIsDragging(false);
+            setResizeHandle(null);
           }}
         >
           {pageImage ? (
-            <img src={pageImage} alt={`Page ${currentPage}`} className="max-w-full" draggable={false} />
+            <img src={pageImage} alt={`Page ${currentPage}`} className="max-w-full select-none" draggable={false} />
           ) : (
             <div className="w-96 h-64 flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -400,104 +790,133 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
           
           <svg className="absolute inset-0 w-full h-full pointer-events-none">
             {pageAnnotations.map((ann) => {
-              const isSelected = ann.id === selectedAnnotation;
-              const strokeWidth = isSelected ? 3 : 2;
+              const isSelected = ann.id === selectedId;
 
               if (ann.type === "rectangle") {
                 return (
-                  <rect
-                    key={ann.id}
-                    x={ann.x}
-                    y={ann.y}
-                    width={ann.width}
-                    height={ann.height}
-                    fill="none"
-                    stroke={ann.color}
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={isSelected ? "5,5" : undefined}
-                  />
+                  <g key={ann.id}>
+                    <rect
+                      x={ann.x}
+                      y={ann.y}
+                      width={ann.width}
+                      height={ann.height}
+                      fill={ann.filled ? ann.fillColor : "none"}
+                      stroke={ann.color}
+                      strokeWidth={isSelected ? 3 : 2}
+                      strokeDasharray={isSelected ? "5,5" : undefined}
+                    />
+                    {renderResizeHandles(ann)}
+                  </g>
                 );
               }
 
               if (ann.type === "circle") {
-                const rx = (ann.width || 0) / 2;
-                const ry = (ann.height || 0) / 2;
                 return (
-                  <ellipse
-                    key={ann.id}
-                    cx={ann.x + rx}
-                    cy={ann.y + ry}
-                    rx={rx}
-                    ry={ry}
-                    fill="none"
-                    stroke={ann.color}
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={isSelected ? "5,5" : undefined}
-                  />
+                  <g key={ann.id}>
+                    <ellipse
+                      cx={ann.x + ann.width / 2}
+                      cy={ann.y + ann.height / 2}
+                      rx={ann.width / 2}
+                      ry={ann.height / 2}
+                      fill={ann.filled ? ann.fillColor : "none"}
+                      stroke={ann.color}
+                      strokeWidth={isSelected ? 3 : 2}
+                      strokeDasharray={isSelected ? "5,5" : undefined}
+                    />
+                    {renderResizeHandles(ann)}
+                  </g>
                 );
               }
 
               if (ann.type === "line") {
                 return (
-                  <line
-                    key={ann.id}
-                    x1={ann.x}
-                    y1={ann.y}
-                    x2={ann.endX}
-                    y2={ann.endY}
-                    stroke={ann.color}
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={isSelected ? "5,5" : undefined}
-                  />
+                  <g key={ann.id}>
+                    <line
+                      x1={ann.x}
+                      y1={ann.y}
+                      x2={ann.endX}
+                      y2={ann.endY}
+                      stroke={ann.color}
+                      strokeWidth={isSelected ? 3 : 2}
+                      strokeDasharray={isSelected ? "5,5" : undefined}
+                    />
+                  </g>
                 );
               }
 
               if (ann.type === "highlight") {
                 return (
-                  <rect
-                    key={ann.id}
-                    x={ann.x}
-                    y={ann.y}
-                    width={ann.width}
-                    height={ann.height}
-                    fill={ann.color}
-                    opacity={0.3}
-                    stroke={isSelected ? ann.color : "none"}
-                    strokeWidth={isSelected ? 2 : 0}
-                    strokeDasharray={isSelected ? "5,5" : undefined}
-                  />
+                  <g key={ann.id}>
+                    <rect
+                      x={ann.x}
+                      y={ann.y}
+                      width={ann.width}
+                      height={ann.height}
+                      fill={ann.color}
+                      opacity={0.3}
+                      stroke={isSelected ? ann.color : "none"}
+                      strokeWidth={isSelected ? 2 : 0}
+                      strokeDasharray={isSelected ? "5,5" : undefined}
+                    />
+                    {renderResizeHandles(ann)}
+                  </g>
                 );
               }
 
               if (ann.type === "freehand" && ann.points) {
-                const d = ann.points
-                  .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-                  .join(" ");
+                const d = ann.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
                 return (
-                  <path
-                    key={ann.id}
-                    d={d}
-                    fill="none"
-                    stroke={ann.color}
-                    strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <g key={ann.id}>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={ann.color}
+                      strokeWidth={isSelected ? 3 : 2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    {isSelected && (
+                      <rect
+                        x={ann.x - 2}
+                        y={ann.y - 2}
+                        width={ann.width + 4}
+                        height={ann.height + 4}
+                        fill="none"
+                        stroke="#0066ff"
+                        strokeWidth={1}
+                        strokeDasharray="5,5"
+                      />
+                    )}
+                  </g>
                 );
               }
 
               if (ann.type === "text") {
                 return (
-                  <text
-                    key={ann.id}
-                    x={ann.x}
-                    y={ann.y + (ann.fontSize || 16)}
-                    fill={ann.color}
-                    fontSize={ann.fontSize}
-                    fontFamily="Arial, sans-serif"
-                  >
-                    {ann.text}
-                  </text>
+                  <g key={ann.id}>
+                    {isSelected && (
+                      <rect
+                        x={ann.x - 2}
+                        y={ann.y - 2}
+                        width={ann.width + 4}
+                        height={ann.height + 4}
+                        fill="none"
+                        stroke="#0066ff"
+                        strokeWidth={1}
+                        strokeDasharray="5,5"
+                      />
+                    )}
+                    <text
+                      x={ann.x}
+                      y={ann.y + (ann.fontSize || 24)}
+                      fill={ann.color}
+                      fontSize={ann.fontSize}
+                      fontFamily={ann.fontFamily || "Arial"}
+                    >
+                      {ann.text}
+                    </text>
+                    {renderResizeHandles(ann)}
+                  </g>
                 );
               }
 
@@ -513,42 +932,51 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
                 strokeLinecap="round"
               />
             )}
+
+            {isDrawing && drawStart && selectedTool === "rectangle" && (
+              <rect
+                x={Math.min(drawStart.x, drawStart.x)}
+                y={Math.min(drawStart.y, drawStart.y)}
+                width={1}
+                height={1}
+                fill={fillEnabled ? currentFillColor : "none"}
+                stroke={currentColor}
+                strokeWidth={2}
+                strokeDasharray="5,5"
+              />
+            )}
           </svg>
 
           {showTextInput && textPosition && (
             <div
-              className="absolute bg-white p-2 rounded shadow-lg border"
+              className="absolute bg-white p-3 rounded-lg shadow-lg border z-50"
               style={{ left: textPosition.x, top: textPosition.y }}
             >
-              <Input
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Enter text..."
-                className="w-48 mb-2"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") addTextAnnotation();
-                  if (e.key === "Escape") {
-                    setShowTextInput(false);
-                    setTextPosition(null);
-                  }
-                }}
-                data-testid="text-input"
-              />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={addTextAnnotation} data-testid="add-text-btn">
-                  Add
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowTextInput(false);
-                    setTextPosition(null);
+              <div className="space-y-2">
+                <Input
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Enter text..."
+                  className="w-56"
+                  autoFocus
+                  style={{ fontFamily, fontSize: Math.min(fontSize, 20) }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addTextAnnotation();
+                    if (e.key === "Escape") {
+                      setShowTextInput(false);
+                      setTextPosition(null);
+                    }
                   }}
-                >
-                  Cancel
-                </Button>
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={addTextAnnotation}>Add</Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setShowTextInput(false);
+                    setTextPosition(null);
+                  }}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -556,7 +984,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       </div>
 
       <p className="text-sm text-muted-foreground text-center">
-        Click to add text, drag to draw shapes. Your annotations will be saved to the PDF!
+        Select elements to move, resize, and edit. Use the color picker for custom colors!
       </p>
     </div>
   );
