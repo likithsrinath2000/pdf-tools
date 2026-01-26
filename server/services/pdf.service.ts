@@ -465,14 +465,18 @@ export class PDFService {
     inputPath: string, 
     outputPath: string, 
     annotations: Array<{
-      type: 'text' | 'rectangle' | 'circle';
+      type: string;
       page: number;
       x: number;
       y: number;
-      content?: string;
+      text?: string;
       width?: number;
       height?: number;
-      color?: { r: number; g: number; b: number };
+      color?: string;
+      fontSize?: number;
+      points?: Array<{ x: number; y: number }>;
+      endX?: number;
+      endY?: number;
     }>
   ): Promise<void> {
     const pdfBytes = await fs.readFile(inputPath);
@@ -480,43 +484,108 @@ export class PDFService {
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     
     const pages = pdf.getPages();
+
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (result) {
+        return rgb(
+          parseInt(result[1], 16) / 255,
+          parseInt(result[2], 16) / 255,
+          parseInt(result[3], 16) / 255
+        );
+      }
+      return rgb(0, 0, 0);
+    };
     
     for (const annotation of annotations) {
       const pageIdx = annotation.page - 1;
       if (pageIdx < 0 || pageIdx >= pages.length) continue;
       
       const page = pages[pageIdx];
-      const color = annotation.color ? rgb(annotation.color.r, annotation.color.g, annotation.color.b) : rgb(0, 0, 0);
+      const { width: pageWidth, height: pageHeight } = page.getSize();
+      const color = annotation.color ? hexToRgb(annotation.color) : rgb(0, 0, 0);
+      
+      const scale = pageHeight / 800;
+      const pdfX = annotation.x * scale / 1.5;
+      const pdfY = pageHeight - (annotation.y * scale / 1.5);
       
       switch (annotation.type) {
         case 'text':
-          page.drawText(annotation.content || '', {
-            x: annotation.x,
-            y: annotation.y,
-            size: 12,
+          const fontSize = (annotation.fontSize || 16) * scale / 1.5;
+          page.drawText(annotation.text || '', {
+            x: pdfX,
+            y: pdfY - fontSize,
+            size: fontSize,
             font,
             color,
           });
           break;
+          
         case 'rectangle':
+          const rectWidth = (annotation.width || 100) * scale / 1.5;
+          const rectHeight = (annotation.height || 50) * scale / 1.5;
           page.drawRectangle({
-            x: annotation.x,
-            y: annotation.y,
-            width: annotation.width || 100,
-            height: annotation.height || 50,
+            x: pdfX,
+            y: pdfY - rectHeight,
+            width: rectWidth,
+            height: rectHeight,
             borderColor: color,
             borderWidth: 2,
           });
           break;
+          
         case 'circle':
+          const xScale = ((annotation.width || 50) / 2) * scale / 1.5;
+          const yScale = ((annotation.height || 50) / 2) * scale / 1.5;
           page.drawEllipse({
-            x: annotation.x,
-            y: annotation.y,
-            xScale: (annotation.width || 50) / 2,
-            yScale: (annotation.height || 50) / 2,
+            x: pdfX + xScale,
+            y: pdfY - yScale,
+            xScale,
+            yScale,
             borderColor: color,
             borderWidth: 2,
           });
+          break;
+          
+        case 'line':
+          if (annotation.endX !== undefined && annotation.endY !== undefined) {
+            const endPdfX = annotation.endX * scale / 1.5;
+            const endPdfY = pageHeight - (annotation.endY * scale / 1.5);
+            page.drawLine({
+              start: { x: pdfX, y: pdfY },
+              end: { x: endPdfX, y: endPdfY },
+              thickness: 2,
+              color,
+            });
+          }
+          break;
+          
+        case 'highlight':
+          const hlWidth = (annotation.width || 100) * scale / 1.5;
+          const hlHeight = (annotation.height || 20) * scale / 1.5;
+          page.drawRectangle({
+            x: pdfX,
+            y: pdfY - hlHeight,
+            width: hlWidth,
+            height: hlHeight,
+            color,
+            opacity: 0.3,
+          });
+          break;
+          
+        case 'freehand':
+          if (annotation.points && annotation.points.length > 1) {
+            for (let i = 1; i < annotation.points.length; i++) {
+              const p1 = annotation.points[i - 1];
+              const p2 = annotation.points[i];
+              page.drawLine({
+                start: { x: p1.x * scale / 1.5, y: pageHeight - (p1.y * scale / 1.5) },
+                end: { x: p2.x * scale / 1.5, y: pageHeight - (p2.y * scale / 1.5) },
+                thickness: 2,
+                color,
+              });
+            }
+          }
           break;
       }
     }

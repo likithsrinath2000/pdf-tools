@@ -28,6 +28,7 @@ import { OrganizePdfEditor } from "@/components/tools/OrganizePdfEditor";
 import { ExtractPagesEditor } from "@/components/tools/ExtractPagesEditor";
 import { RotatePagesEditor } from "@/components/tools/RotatePagesEditor";
 import { HtmlToPdfEditor } from "@/components/tools/HtmlToPdfEditor";
+import { EditPdfEditor } from "@/components/tools/EditPdfEditor";
 
 type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
 
@@ -280,6 +281,15 @@ export default function ToolPage() {
             onChange={(angle) => setProcessingOptions({ ...processingOptions, angle })} 
           />
         </div>
+      );
+    }
+
+    if (tool.id === "edit-pdf") {
+      return (
+        <EditPdfEditor 
+          files={files} 
+          onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
+        />
       );
     }
 
