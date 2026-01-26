@@ -46,6 +46,21 @@ Preferred communication style: Simple, everyday language.
 - **Production Build**: esbuild bundles server to CJS, Vite builds client to `dist/public`
 - **Deployment Target**: Azure VM with Ubuntu (documented in DEPLOYMENT.md)
 
+### Performance Optimizations
+- **Code Splitting**: React.lazy() for all pages and tool editors
+- **Service Worker**: Caches static assets (CSS, JS, fonts, images) with offline support
+- **HTTP Caching**: 1-year cache for static assets with immutable flag, ETag support
+- **React.memo**: Applied to ToolCard, Footer, and tool-page components
+- **Query Optimization**: TanStack Query with 5-min staleTime, 30-min cache retention
+- **Thumbnail Caching**: IndexedDB with 24h expiry, 100 item max, batch processing
+- **User Preferences**: Cookie-based storage for theme, language, recent tools (30-day expiry)
+
+### Code Organization
+- **Modular Routes**: server/routes/ directory with pdf, image, office, job routes
+- **Tool Page Components**: client/src/components/tool-page/ with extracted components
+- **Custom Hooks**: useToolProcessing, usePreferences for state management
+- **Utility Libraries**: cache.ts, preferences.ts, thumbnailCache.ts
+
 ## External Dependencies
 
 ### Core Services
