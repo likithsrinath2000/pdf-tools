@@ -460,13 +460,14 @@ export default function ToolPage() {
     }
 
     if (stage === "files-selected") {
+      const isCreateTool = ["create-document", "create-word", "create-excel", "create-powerpoint"].includes(tool.id);
       return (
         <div className="w-full flex flex-col items-center gap-8">
           <Suspense fallback={<EditorLoader />}>
             {renderContent()}
           </Suspense>
           <FilesSelectedActions
-            showAddMore={!tool.maxFiles}
+            showAddMore={!tool.maxFiles && !isCreateTool}
             onAddMore={() => setStage("upload")}
             onProcess={() => handleProcess(tool.id)}
             actionText={tool.action}
@@ -483,12 +484,13 @@ export default function ToolPage() {
     }
 
     if (stage === "download") {
+      const isCreateTool = ["create-document", "create-word", "create-excel", "create-powerpoint"].includes(tool.id);
       return (
         <div className="w-full max-w-md text-center space-y-8 animate-in fade-in zoom-in-95 duration-500">
           <ToolProgress stage="download" progress={100} error={null} color={tool.color} />
           <DownloadActions
             onDownload={() => handleDownload(tool.id)}
-            onBackToEdit={() => setStage("files-selected")}
+            onBackToEdit={() => setStage(isCreateTool ? "upload" : "files-selected")}
             onStartOver={handleReset}
             onDelete={handleDeleteFile}
           />
