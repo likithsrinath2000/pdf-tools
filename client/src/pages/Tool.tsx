@@ -24,6 +24,10 @@ import { SignatureOptions } from "@/components/tools/SignatureOptions";
 import { ResizeOptions } from "@/components/tools/ResizeOptions";
 import { CropOptions } from "@/components/tools/CropOptions";
 import { VisualCropEditor } from "@/components/tools/VisualCropEditor";
+import { VisualResizeEditor } from "@/components/tools/VisualResizeEditor";
+import { VisualRotateEditor } from "@/components/tools/VisualRotateEditor";
+import { VisualCompressEditor } from "@/components/tools/VisualCompressEditor";
+import { VisualConvertEditor } from "@/components/tools/VisualConvertEditor";
 import { ExtractPagesOptions } from "@/components/tools/ExtractPagesOptions";
 import { OrganizePdfEditor } from "@/components/tools/OrganizePdfEditor";
 import { ExtractPagesEditor } from "@/components/tools/ExtractPagesEditor";
@@ -172,11 +176,23 @@ export default function ToolPage() {
       return <SplitEditor files={files} />;
     }
 
-    if (tool.id === "compress-pdf" || tool.id === "compress-image") {
+    if (tool.id === "compress-pdf") {
        return (
          <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
            <FileList files={files} onRemove={removeFile} />
            <CompressOptions onChange={(quality) => setProcessingOptions({ ...processingOptions, quality })} />
+         </div>
+       );
+    }
+
+    if (tool.id === "compress-image") {
+       return (
+         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+           <FileList files={files} onRemove={removeFile} />
+           <VisualCompressEditor 
+             imageFile={files[0] || null}
+             onChange={(quality) => setProcessingOptions({ ...processingOptions, quality })} 
+           />
          </div>
        );
     }
@@ -279,8 +295,9 @@ export default function ToolPage() {
       return (
         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
           <FileList files={files} onRemove={removeFile} />
-          <RotateOptions 
-            onChange={(angle) => setProcessingOptions({ ...processingOptions, angle })} 
+          <VisualRotateEditor 
+            imageFile={files[0] || null}
+            onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
           />
         </div>
       );
@@ -311,7 +328,8 @@ export default function ToolPage() {
       return (
         <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
           <FileList files={files} onRemove={removeFile} />
-          <ResizeOptions 
+          <VisualResizeEditor 
+            imageFile={files[0] || null}
             onChange={(opts) => setProcessingOptions({ ...processingOptions, ...opts })} 
           />
         </div>
@@ -353,6 +371,18 @@ export default function ToolPage() {
         <DocumentEditor 
           onOptionsChange={(options) => setProcessingOptions({ ...processingOptions, ...options })}
         />
+      );
+    }
+
+    if (tool.id === "convert-image") {
+      return (
+        <div className="w-full space-y-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <FileList files={files} onRemove={removeFile} />
+          <VisualConvertEditor 
+            imageFile={files[0] || null}
+            onChange={(format) => setProcessingOptions({ ...processingOptions, format })} 
+          />
+        </div>
       );
     }
 
