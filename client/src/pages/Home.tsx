@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 
 export default function Home() {
+  const favorites = ["merge-pdf", "split-pdf", "compress-pdf", "pdf-to-word", "word-to-pdf"];
+  const allTools = TOOLS;
+  
   return (
     <div className="min-h-screen flex flex-col bg-slate-50/50">
       <Navbar />
@@ -24,16 +27,26 @@ export default function Home() {
             <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-xl shadow-primary/20 hover:scale-105 transition-transform">
               Explore All Tools
             </Button>
-            <Button size="lg" variant="outline" className="h-14 px-8 text-lg rounded-full bg-white hover:bg-slate-50">
-              Read Guide
-            </Button>
           </div>
         </div>
 
-        {/* Tools Grid */}
+        {/* Most Popular Tools */}
+        <div className="max-w-7xl mx-auto mb-16">
+          <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">Most Popular Tools</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {allTools.filter(t => favorites.includes(t.id)).map((tool, i) => (
+              <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
+                <ToolCard {...tool} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* All Tools Grid */}
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {TOOLS.map((tool, i) => (
+          <h2 className="text-2xl font-bold font-display text-slate-900 mb-8">All PDF Tools</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {allTools.filter(t => !favorites.includes(t.id)).map((tool, i) => (
               <div key={tool.id} className="animate-in fade-in zoom-in-50 duration-500" style={{ animationDelay: `${i * 50}ms` }}>
                 <ToolCard {...tool} />
               </div>
@@ -51,9 +64,6 @@ export default function Home() {
               We provide all the features you need to manage your documents effectively. 
               Our tools are secure, fast, and easy to use on any device.
             </p>
-            <Button variant="link" className="text-primary p-0 h-auto text-lg font-semibold group">
-              Learn more about Premium <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Button>
           </div>
           <div className="relative h-64 md:h-96 rounded-3xl bg-slate-200 overflow-hidden shadow-2xl">
             <img 

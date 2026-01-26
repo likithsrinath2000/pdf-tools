@@ -19,6 +19,7 @@ export function Navbar() {
         <Link href="/merge-pdf" className="text-sm font-medium hover:text-primary transition-colors">Merge PDF</Link>
         <Link href="/split-pdf" className="text-sm font-medium hover:text-primary transition-colors">Split PDF</Link>
         <Link href="/compress-pdf" className="text-sm font-medium hover:text-primary transition-colors">Compress PDF</Link>
+        <Link href="/compress-image" className="text-sm font-medium hover:text-primary transition-colors">Compress Image</Link>
         <div className="h-4 w-px bg-border mx-2"></div>
         <Button variant="ghost" className="font-semibold">Log in</Button>
         <Button className="font-semibold shadow-lg shadow-primary/20">Sign up</Button>
