@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api";
+import { 
+  canProcessClientSideAsync, 
+  processClientSide, 
+  downloadBlob,
+  type ProcessingResult 
+} from "@/lib/clientProcessing";
 import type { ProcessingJob } from "@shared/schema";
 
 /**
@@ -11,6 +17,15 @@ import type { ProcessingJob } from "@shared/schema";
  * - error: An error occurred during processing
  */
 export type Stage = "upload" | "files-selected" | "processing" | "download" | "error";
+
+/**
+ * Processing mode prediction - shown before user clicks process
+ */
+export interface ProcessingModePrediction {
+  mode: 'client' | 'server' | 'checking';
+  reason: string;
+  deviceScore?: number;
+}
 
 /**
  * Return type for the useToolProcessing hook
@@ -28,6 +43,9 @@ export interface UseToolProcessingResult {
   pdfNotEncrypted: boolean;
   setPdfNotEncrypted: React.Dispatch<React.SetStateAction<boolean>>;
   checkingEncryption: boolean;
+  processedClientSide: boolean;
+  clientResult: ProcessingResult | null;
+  processingPrediction: ProcessingModePrediction | null;
   handleFilesSelected: (selectedFiles: File[], toolId: string, maxFiles?: number) => Promise<void>;
   removeFile: (index: number) => void;
   handleReorder: (reorderedFiles: File[]) => void;
@@ -40,6 +58,7 @@ export interface UseToolProcessingResult {
 /**
  * Custom hook that manages the processing logic and state for the Tool page.
  * Handles file selection, upload, processing, download, and error states.
+ * Now supports hybrid processing: client-side when possible, server fallback otherwise.
  * 
  * @param toolId - The ID of the current tool being used
  * @returns Object containing state and handlers for the tool processing workflow
@@ -53,6 +72,11 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
   const [processingOptions, setProcessingOptions] = useState<any>({});
   const [pdfNotEncrypted, setPdfNotEncrypted] = useState(false);
   const [checkingEncryption, setCheckingEncryption] = useState(false);
+  // Client-side processing state
+  const [processedClientSide, setProcessedClientSide] = useState(false);
+  const [clientResult, setClientResult] = useState<ProcessingResult | null>(null);
+  // Processing mode prediction (shown before user clicks process)
+  const [processingPrediction, setProcessingPrediction] = useState<ProcessingModePrediction | null>(null);
 
   // Reset all state when tool changes
   useEffect(() => {
@@ -64,7 +88,43 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     setProcessingOptions({});
     setPdfNotEncrypted(false);
     setCheckingEncryption(false);
+    setProcessedClientSide(false);
+    setClientResult(null);
+    setProcessingPrediction(null);
   }, [toolId]);
+
+  // Update processing prediction when files change
+  useEffect(() => {
+    if (!toolId || files.length === 0) {
+      setProcessingPrediction(null);
+      return;
+    }
+
+    // Set checking state
+    setProcessingPrediction({ mode: 'checking', reason: 'Analyzing...' });
+
+    // Check processing mode asynchronously
+    const checkMode = async () => {
+      try {
+        const result = await canProcessClientSideAsync(toolId, files);
+        setProcessingPrediction({
+          mode: result.canProcess ? 'client' : 'server',
+          reason: result.reason || (result.canProcess 
+            ? 'Will be processed locally in your browser' 
+            : 'Will be processed on our secure servers'),
+          deviceScore: result.capabilities?.performanceScore,
+        });
+      } catch (err) {
+        // Default to server on error
+        setProcessingPrediction({
+          mode: 'server',
+          reason: 'Will be processed on our secure servers',
+        });
+      }
+    };
+
+    checkMode();
+  }, [toolId, files]);
 
   /**
    * Handle file selection - validates files, checks for PDF encryption if needed
@@ -117,6 +177,7 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
 
   /**
    * Start processing the selected files with the current tool
+   * Uses hybrid processing: tries client-side first, falls back to server if needed
    */
   const handleProcess = useCallback(async (currentToolId: string) => {
     if (!currentToolId) return;
@@ -124,8 +185,61 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     setStage("processing");
     setProgress(0);
     setError(null);
+    setClientResult(null);
 
+    // Check if we can process client-side (async for full device capability check)
+    const clientCheck = await canProcessClientSideAsync(currentToolId, files);
+    
+    if (clientCheck.canProcess) {
+      // Set client-side flag BEFORE processing so UI shows the indicator
+      setProcessedClientSide(true);
+      
+      // Try client-side processing first
+      try {
+        console.log(`[Hybrid] Processing "${currentToolId}" client-side`);
+        if (clientCheck.capabilities) {
+          console.log(`[Hybrid] Device score: ${clientCheck.capabilities.performanceScore}/100, Recommendation: ${clientCheck.capabilities.recommendation}`);
+        }
+        
+        const result = await processClientSide(
+          currentToolId,
+          files,
+          processingOptions,
+          (p) => setProgress(p)
+        );
+        
+        setClientResult(result);
+        // Keep processedClientSide true
+        setStage("download");
+        console.log(`[Hybrid] Client-side processing complete`);
+        return;
+      } catch (clientError: any) {
+        // Check if we should fallback to server
+        if (clientError.message?.startsWith('CLIENT_FALLBACK:')) {
+          console.log(`[Hybrid] Falling back to server: ${clientError.message}`);
+          // Reset client-side flag since we're falling back to server
+          setProcessedClientSide(false);
+          // Continue to server processing below
+        } else {
+          // Actual error, not a fallback trigger
+          console.error(`[Hybrid] Client-side error:`, clientError);
+          setError(clientError.message || "Client-side processing failed");
+          setStage("error");
+          return;
+        }
+      }
+    } else {
+      setProcessedClientSide(false);
+      console.log(`[Hybrid] Using server: ${clientCheck.reason}`);
+      if (clientCheck.capabilities) {
+        console.log(`[Hybrid] Device score: ${clientCheck.capabilities.performanceScore}/100`);
+      }
+    }
+
+    // Server-side processing (fallback or required)
     try {
+      setProgress(0);
+      
       // Create a job on the server and upload files
       const { jobId } = await apiClient.createJob(currentToolId, files, processingOptions);
       
@@ -138,6 +252,7 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
       // Fetch final job status
       const finalJob = await apiClient.getJob(jobId);
       setCurrentJob(finalJob);
+      setProcessedClientSide(false);
       setStage("download");
     } catch (err: any) {
       setError(err.message || "An error occurred during processing");
@@ -147,17 +262,25 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
 
   /**
    * Download the processed file
+   * Handles both client-side results and server-side results
    */
   const handleDownload = useCallback(async (currentToolId: string) => {
-    if (!currentJob) return;
-    
     try {
+      // Client-side result - download directly from memory
+      if (processedClientSide && clientResult) {
+        downloadBlob(clientResult.outputFile, clientResult.outputFileName);
+        return;
+      }
+      
+      // Server-side result - download from server
+      if (!currentJob) return;
+      
       const filename = `${currentToolId}_${Date.now()}.${currentJob.outputFile?.split('.').pop()}`;
       await apiClient.downloadJob(currentJob.id, filename);
     } catch (err: any) {
       setError(err.message || "Failed to download file");
     }
-  }, [currentJob]);
+  }, [currentJob, processedClientSide, clientResult]);
 
   /**
    * Reset all state to start a new processing session
@@ -169,12 +292,22 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     setCurrentJob(null);
     setError(null);
     setProcessingOptions({});
+    setProcessedClientSide(false);
+    setClientResult(null);
+    setProcessingPrediction(null);
   }, []);
 
   /**
    * Delete the processed file and reset state
+   * For client-side processing, just resets state (nothing on server to delete)
    */
   const handleDeleteFile = useCallback(async () => {
+    // Client-side processed files don't need server cleanup
+    if (processedClientSide) {
+      handleReset();
+      return;
+    }
+    
     if (!currentJob) return;
     
     try {
@@ -184,7 +317,7 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
       console.error("Failed to delete file:", err);
       handleReset();
     }
-  }, [currentJob, handleReset]);
+  }, [currentJob, processedClientSide, handleReset]);
 
   return {
     stage,
@@ -199,6 +332,9 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     pdfNotEncrypted,
     setPdfNotEncrypted,
     checkingEncryption,
+    processedClientSide,
+    clientResult,
+    processingPrediction,
     handleFilesSelected,
     removeFile,
     handleReorder,

@@ -6,8 +6,71 @@ import {
   Trash2, 
   ArrowLeft, 
   ArrowRight, 
-  Plus 
+  Plus,
+  Cpu,
+  Cloud,
+  Shield,
+  Zap,
+  Loader2,
 } from "lucide-react";
+import type { ProcessingModePrediction } from "./useToolProcessing";
+
+/**
+ * Processing mode indicator badge - shows before user clicks process
+ */
+interface ProcessingModeIndicatorProps {
+  prediction: ProcessingModePrediction | null;
+}
+
+const ProcessingModeIndicator = React.memo(function ProcessingModeIndicator({
+  prediction,
+}: ProcessingModeIndicatorProps) {
+  if (!prediction) return null;
+
+  if (prediction.mode === 'checking') {
+    return (
+      <div className="flex items-center justify-center mb-4 animate-in fade-in duration-300">
+        <div className="inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Analyzing your files...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (prediction.mode === 'client') {
+    return (
+      <div className="flex flex-col items-center gap-2 mb-4 animate-in fade-in slide-in-from-top duration-500">
+        <div className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-full px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          <Cpu className="w-4 h-4" />
+          <span>Will process in your browser</span>
+          <Zap className="w-3 h-3" />
+        </div>
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <Shield className="w-3 h-3" />
+          {prediction.reason}
+          {prediction.deviceScore !== undefined && (
+            <span className="opacity-60">• Device score: {prediction.deviceScore}/100</span>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  // Server mode
+  return (
+    <div className="flex flex-col items-center gap-2 mb-4 animate-in fade-in slide-in-from-top duration-500">
+      <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-400">
+        <Cloud className="w-4 h-4" />
+        <span>Will process on server</span>
+      </div>
+      <p className="text-xs text-muted-foreground flex items-center gap-1">
+        <Shield className="w-3 h-3" />
+        {prediction.reason}
+      </p>
+    </div>
+  );
+});
 
 /**
  * Props for FilesSelectedActions component
@@ -18,11 +81,12 @@ interface FilesSelectedActionsProps {
   onProcess: () => void;
   actionText: string;
   color: string;
+  processingPrediction?: ProcessingModePrediction | null;
 }
 
 /**
  * Actions displayed when files are selected (before processing)
- * Shows "Add more files" button (optional) and the main action button
+ * Shows "Add more files" button (optional), processing mode indicator, and the main action button
  */
 const FilesSelectedActions = React.memo(function FilesSelectedActions({
   showAddMore,
@@ -30,29 +94,36 @@ const FilesSelectedActions = React.memo(function FilesSelectedActions({
   onProcess,
   actionText,
   color,
+  processingPrediction,
 }: FilesSelectedActionsProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t w-full">
-      {showAddMore && (
-        <Button 
-          variant="outline" 
-          size="lg" 
-          onClick={onAddMore}
-          className="rounded-full h-12 px-8"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Add more files
-        </Button>
-      )}
-      <Button 
-        size="lg" 
-        onClick={onProcess}
-        className={cn(
-          "rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", 
-          color
+    <div className="flex flex-col gap-4 justify-center pt-8 border-t w-full">
+      {/* Processing mode indicator */}
+      <ProcessingModeIndicator prediction={processingPrediction ?? null} />
+      
+      {/* Action buttons */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        {showAddMore && (
+          <Button 
+            variant="outline" 
+            size="lg" 
+            onClick={onAddMore}
+            className="rounded-full h-12 px-8"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Add more files
+          </Button>
         )}
-      >
-        {actionText} <ArrowRight className="ml-2 h-5 w-5" />
-      </Button>
+        <Button 
+          size="lg" 
+          onClick={onProcess}
+          className={cn(
+            "rounded-full h-12 px-12 text-lg shadow-lg hover:scale-105 transition-transform", 
+            color
+          )}
+        >
+          {actionText} <ArrowRight className="ml-2 h-5 w-5" />
+        </Button>
+      </div>
     </div>
   );
 });

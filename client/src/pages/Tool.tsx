@@ -98,6 +98,8 @@ export default function ToolPage() {
     pdfNotEncrypted,
     setPdfNotEncrypted,
     checkingEncryption,
+    processedClientSide,
+    processingPrediction,
     handleFilesSelected,
     removeFile,
     handleReorder,
@@ -472,6 +474,7 @@ export default function ToolPage() {
             onProcess={() => handleProcess(tool.id)}
             actionText={tool.action}
             color={tool.color}
+            processingPrediction={processingPrediction}
           />
         </div>
       );
@@ -479,7 +482,7 @@ export default function ToolPage() {
 
     if (stage === "processing") {
       return (
-        <ToolProgress stage="processing" progress={progress} error={null} color={tool.color} />
+        <ToolProgress stage="processing" progress={progress} error={null} color={tool.color} isClientSide={processedClientSide} />
       );
     }
 
@@ -487,7 +490,7 @@ export default function ToolPage() {
       const isCreateTool = ["create-document", "create-word", "create-excel", "create-powerpoint"].includes(tool.id);
       return (
         <div className="w-full max-w-md text-center space-y-8 animate-in fade-in zoom-in-95 duration-500">
-          <ToolProgress stage="download" progress={100} error={null} color={tool.color} />
+          <ToolProgress stage="download" progress={100} error={null} color={tool.color} isClientSide={processedClientSide} />
           <DownloadActions
             onDownload={() => handleDownload(tool.id)}
             onBackToEdit={() => setStage(isCreateTool ? "upload" : "files-selected")}

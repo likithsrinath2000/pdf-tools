@@ -7,7 +7,7 @@
  */
 
 export { useToolProcessing } from "./useToolProcessing";
-export type { Stage, UseToolProcessingResult } from "./useToolProcessing";
+export type { Stage, UseToolProcessingResult, ProcessingModePrediction } from "./useToolProcessing";
 
 export { ToolHeader } from "./ToolHeader";
 export type { ToolHeaderProps } from "./ToolHeader";
