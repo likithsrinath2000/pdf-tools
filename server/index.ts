@@ -128,4 +128,27 @@ app.use((req, res, next) => {
       process.exit(0);
     });
   });
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught Exception - Server will restart:', { 
+      error: error.message, 
+      stack: error.stack?.substring(0, 1000) 
+    });
+    console.error('FATAL: Uncaught Exception:', error);
+    cleanupService.stop();
+    httpServer.close(() => {
+      process.exit(1);
+    });
+    setTimeout(() => {
+      process.exit(1);
+    }, 5000);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Promise Rejection:', { 
+      reason: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack?.substring(0, 1000) : undefined
+    });
+    console.error('WARNING: Unhandled Promise Rejection:', reason);
+  });
 })();

@@ -26,7 +26,7 @@ import { TOOLS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Menu } from "lucide-react";
 import { LanguageSelector } from "./LanguageSelector";
-import logoImage from "@/assets/logo-humorous.png";
+const logoImage = "/logo.png";
 
 export function Navbar() {
   const [location] = useLocation();

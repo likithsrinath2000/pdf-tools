@@ -1,5 +1,5 @@
 import { memo } from "react";
-import logoImage from "@/assets/logo-humorous.png";
+const logoImage = "/logo.png";
 
 /**
  * Footer Component - Memoized for Performance
