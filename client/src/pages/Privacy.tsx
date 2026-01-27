@@ -121,7 +121,7 @@ export default function Privacy() {
                 We're real people and we actually respond to emails.
               </p>
               <p className="text-lg font-medium text-primary">
-                privacy@pdftools.example.com
+              waltwhite929@gmail.com
               </p>
             </section>
           </div>

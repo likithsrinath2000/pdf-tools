@@ -172,7 +172,7 @@ export default function Terms() {
                 reach out to us. We're here to help.
               </p>
               <p className="text-lg font-medium text-primary">
-                legal@pdftools.example.com
+                  waltwhite929@gmail.com
               </p>
             </section>
 

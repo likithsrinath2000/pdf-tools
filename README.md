@@ -126,11 +126,12 @@ server/
 - pdf-lib, sharp, libreoffice
 
 ### Infrastructure
+- Azure Container Apps (auto-scaling, managed)
+- Azure Container Registry (private image storage)
+- Azure PostgreSQL Flexible Server
 - Winston (logging with daily rotation)
 - Prometheus metrics
-- PM2 (process management)
-- Nginx (reverse proxy)
-- Docker support
+- Docker multi-stage builds
 
 ## Quick Start
 
@@ -146,8 +147,72 @@ server/
 # Ubuntu/Debian
 sudo apt install ghostscript poppler-utils qpdf imagemagick libreoffice wkhtmltopdf
 
+# macOS (using Homebrew)
+brew install ghostscript poppler qpdf imagemagick
+brew install --cask libreoffice wkhtmltopdf
+
+# Verify installations
+gs --version          # Ghostscript
+pdftoppm -v           # Poppler
+qpdf --version        # QPDF
+convert --version     # ImageMagick
+soffice --version     # LibreOffice
+wkhtmltopdf --version # wkhtmltopdf
+```
+
+> **Note for macOS users:**
+> - LibreOffice and wkhtmltopdf are installed as casks (GUI applications)
+> - You may need to allow them in System Preferences → Security & Privacy on first run
+> - If `soffice` is not found, add to PATH: `export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"`
+
+### PostgreSQL Setup (Local Development)
+
+**Option 1: Install directly**
+
+```bash
+# Ubuntu/Debian
+sudo apt install postgresql postgresql-contrib
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
 # macOS
-brew install ghostscript poppler qpdf imagemagick libreoffice
+brew install postgresql@14
+brew services start postgresql@14
+```
+
+Create database and user:
+
+```bash
+# Connect to PostgreSQL
+sudo -u postgres psql   # Linux
+psql postgres           # macOS
+
+# Run these SQL commands:
+CREATE DATABASE pdftools;
+CREATE USER pdftools_user WITH ENCRYPTED PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE pdftools TO pdftools_user;
+ALTER DATABASE pdftools OWNER TO pdftools_user;
+\q
+```
+
+Your connection string will be:
+```
+postgresql://pdftools_user:your_password@localhost:5432/pdftools
+```
+
+**Option 2: Use Docker (easiest)**
+
+```bash
+docker run -d \
+  --name pdftools-postgres \
+  -e POSTGRES_USER=pdftools_user \
+  -e POSTGRES_PASSWORD=your_password \
+  -e POSTGRES_DB=pdftools \
+  -p 5432:5432 \
+  postgres:15
+
+# Connection string:
+# postgresql://pdftools_user:your_password@localhost:5432/pdftools
 ```
 
 ### Installation
@@ -180,129 +245,107 @@ npm run dev
 
 Visit `http://localhost:5000`
 
-## Azure VM Deployment
+## Azure Container Apps Deployment (Recommended)
 
-### Quick Deployment Steps
+Deploy to Azure with auto-scaling, managed infrastructure, and full LibreOffice support.
 
-1. **Provision Azure VM**
-   ```bash
-   # Recommended: Standard_B2s (2 vCPUs, 4GB RAM) with Ubuntu 22.04 LTS
-   ```
+### Quick Deployment
 
-2. **Install Dependencies**
-   ```bash
-   # SSH into your VM
-   ssh azureuser@your-vm-ip
-
-   # Install Node.js 20
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt install -y nodejs
-
-   # Install system dependencies
-   sudo apt install -y ghostscript poppler-utils qpdf imagemagick libreoffice wkhtmltopdf nginx
-
-   # Install PM2 globally
-   sudo npm install -g pm2
-   ```
-
-3. **Deploy Application**
-   ```bash
-   # Clone and build
-   git clone <repository-url> /opt/pdftools
-   cd /opt/pdftools
-   npm install
-   npm run build
-
-   # Start with PM2 (cluster mode for multi-core)
-   pm2 start npm --name "pdftools" -i max -- start
-   pm2 save
-   pm2 startup
-   ```
-
-4. **Configure Nginx**
-   ```nginx
-   # /etc/nginx/sites-available/pdftools
-   server {
-       listen 80;
-       server_name your-domain.com;
-
-       location / {
-           proxy_pass http://localhost:5000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-       }
-   }
-   ```
-
-5. **Enable and Start**
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/pdftools /etc/nginx/sites-enabled/
-   sudo nginx -t && sudo systemctl reload nginx
-   ```
-
-### Viewing Metrics on Azure VM
-
-The application exposes Prometheus-compatible metrics at `/api/metrics`. Here's how to view them:
-
-#### Option 1: Direct Access (Quick Check)
 ```bash
-# SSH into your VM and curl the metrics endpoint
-curl http://localhost:5000/api/metrics
+# 1. Login to Azure
+az login
 
-# Sample output:
-# http_request_duration_seconds_bucket{...} 0.045
-# pdftools_jobs_total{status="completed"} 150
-# pdftools_active_jobs 3
+# 2. Create resource group
+az group create --name pdftools-rg --location eastus
+
+# 3. Create PostgreSQL database
+az postgres flexible-server create \
+  --name pdftools-db-server \
+  --resource-group pdftools-rg \
+  --location eastus \
+  --admin-user pdfadmin \
+  --admin-password "YourSecureP@ssw0rd!" \
+  --sku-name Standard_B1ms \
+  --tier Burstable \
+  --public-access Enabled \
+  --yes
+
+az postgres flexible-server db create \
+  --resource-group pdftools-rg \
+  --server-name pdftools-db-server \
+  --database-name pdftools_db
+
+# 4. Create container registry
+az acr create \
+  --name pdftoolsregistry \
+  --resource-group pdftools-rg \
+  --sku Basic \
+  --admin-enabled true
+
+# 5. Build application and push to registry
+npm run build
+az acr build \
+  --registry pdftoolsregistry \
+  --resource-group pdftools-rg \
+  --image pdftools:v1 \
+  --file Dockerfile .
+
+# 6. Create Container Apps environment
+az provider register -n Microsoft.App --wait
+az containerapp env create \
+  --name pdftools-env \
+  --resource-group pdftools-rg \
+  --location eastus
+
+# 7. Deploy container app
+ACR_PASSWORD=$(az acr credential show --name pdftoolsregistry --query "passwords[0].value" -o tsv)
+az containerapp create \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --environment pdftools-env \
+  --image pdftoolsregistry.azurecr.io/pdftools:v1 \
+  --registry-server pdftoolsregistry.azurecr.io \
+  --registry-username pdftoolsregistry \
+  --registry-password "$ACR_PASSWORD" \
+  --target-port 8080 \
+  --ingress external \
+  --cpu 1 --memory 2Gi \
+  --min-replicas 1 --max-replicas 5 \
+  --secrets "db-url=postgresql://pdfadmin:YourSecureP@ssw0rd!@pdftools-db-server.postgres.database.azure.com:5432/pdftools_db?sslmode=require" \
+  --env-vars "NODE_ENV=production" "DATABASE_URL=secretref:db-url"
+
+# 8. Get your app URL
+az containerapp show --name pdftools --resource-group pdftools-rg \
+  --query "properties.configuration.ingress.fqdn" -o tsv
+
+# 9. Run database migrations locally
+export DATABASE_URL="postgresql://pdfadmin:YourSecureP@ssw0rd!@pdftools-db-server.postgres.database.azure.com:5432/pdftools_db?sslmode=require"
+npm run db:push
 ```
 
-#### Option 2: Prometheus + Grafana Setup
+### Update Deployment
 
-1. **Install Prometheus**
-   ```bash
-   # Download and install Prometheus
-   wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.linux-amd64.tar.gz
-   tar xvfz prometheus-*.tar.gz
-   cd prometheus-*
+```bash
+npm run build
+az acr build --registry pdftoolsregistry --image pdftools:v2 --file Dockerfile .
+az containerapp update --name pdftools --resource-group pdftools-rg \
+  --image pdftoolsregistry.azurecr.io/pdftools:v2
+```
 
-   # Configure prometheus.yml
-   cat > prometheus.yml << EOF
-   global:
-     scrape_interval: 15s
+### Monitoring
 
-   scrape_configs:
-     - job_name: 'pdftools'
-       static_configs:
-         - targets: ['localhost:5000']
-       metrics_path: '/api/metrics'
-   EOF
+```bash
+# View logs
+az containerapp logs show --name pdftools --resource-group pdftools-rg --follow
 
-   # Start Prometheus
-   ./prometheus --config.file=prometheus.yml &
-   ```
+# Health check
+curl https://your-app-url.azurecontainerapps.io/api/health
 
-2. **Install Grafana**
-   ```bash
-   sudo apt install -y grafana
-   sudo systemctl start grafana-server
-   sudo systemctl enable grafana-server
-   ```
+# Prometheus metrics
+curl https://your-app-url.azurecontainerapps.io/api/metrics
+```
 
-3. **Access Dashboards**
-   - Prometheus: `http://your-vm-ip:9090`
-   - Grafana: `http://your-vm-ip:3000` (default: admin/admin)
-
-4. **Create Grafana Dashboard**
-   - Add Prometheus as data source (`http://localhost:9090`)
-   - Import dashboard or create panels with queries:
-     - Request rate: `rate(http_request_duration_seconds_count[5m])`
-     - Response time: `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))`
-     - Active jobs: `pdftools_active_jobs`
-     - Jobs completed: `pdftools_jobs_total{status="completed"}`
-
-#### Available Metrics
+### Available Metrics
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -311,30 +354,18 @@ curl http://localhost:5000/api/metrics
 | `pdftools_active_jobs` | Gauge | Currently processing jobs |
 | `pdftools_file_size_bytes` | Histogram | Uploaded file sizes |
 
-### Health Monitoring
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Local Docker Deployment
+
+### Docker Compose (with PostgreSQL)
 
 ```bash
-# Check application health
-curl http://localhost:5000/api/health
-
-# Response:
-# {"status":"ok","timestamp":"2024-01-26T12:00:00Z","database":"connected","uptime":86400}
-
-# View PM2 status
-pm2 status
-
-# View application logs
-pm2 logs pdftools --lines 100
-```
-
-## Docker Deployment
-
-### Quick Start with Docker Compose
-
-```bash
-# Create .env file with your secrets
-echo "DB_PASSWORD=your_secure_password" > .env
-echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env
+# Create .env file
+cat > .env << EOF
+DB_PASSWORD=your_secure_password
+SESSION_SECRET=$(openssl rand -hex 32)
+EOF
 
 # Start all services
 docker-compose up -d
@@ -346,13 +377,17 @@ docker-compose logs -f app
 docker-compose down
 ```
 
-### Build Custom Docker Image
+### Standalone Docker
 
 ```bash
+# Build image
+npm run build
 docker build -t pdftools:latest .
-docker run -p 5000:5000 \
-  -e DATABASE_URL=postgresql://... \
-  -e SESSION_SECRET=... \
+
+# Run container
+docker run -p 8080:8080 \
+  -e DATABASE_URL=postgresql://user:pass@host:5432/db \
+  -e NODE_ENV=production \
   pdftools:latest
 ```
 

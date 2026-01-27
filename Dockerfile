@@ -53,6 +53,7 @@ RUN npm ci --only=production
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/client/public/tinymce ./dist/public/tinymce
 
 # Create necessary directories
 RUN mkdir -p uploads output_files temp_files logs && \
@@ -61,12 +62,16 @@ RUN mkdir -p uploads output_files temp_files logs && \
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 5000
+# Expose port (Azure uses PORT env var, defaults to 8080)
+EXPOSE 8080
+
+# Set default port for Azure
+ENV PORT=8080
+ENV NODE_ENV=production
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD node -e "const port = process.env.PORT || 8080; require('http').get('http://localhost:' + port + '/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start application
 CMD ["node", "dist/index.cjs"]

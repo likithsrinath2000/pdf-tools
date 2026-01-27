@@ -131,7 +131,7 @@ export default function Feedback() {
               <div className="mt-8 pt-8 border-t text-center">
                 <p className="text-sm text-muted-foreground">
                   Found a critical bug? You can also email us directly at{" "}
-                  <span className="text-primary font-medium">bugs@pdftools.example.com</span>
+                  <span className="text-primary font-medium">waltwhite929@gmail.com</span>
                 </p>
               </div>
             </div>

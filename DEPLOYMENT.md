@@ -1,14 +1,18 @@
 # PDFTools Deployment Guide
 
-> Your PDFs won't manipulate themselves... or will they? 🤔
+Complete guide for **local development** and **Azure Container Apps** production deployment.
 
-This guide covers both **local development** and **Azure VM deployment** for production use with support for 5-10+ concurrent users.
+---
 
 ## Table of Contents
 
-- [Local Development](#local-development)
-- [Production Features](#production-features)
-- [Azure VM Deployment](#azure-vm-deployment)
+1. [Local Development](#local-development)
+2. [Production Features](#production-features)
+3. [Azure Container Apps Deployment](#azure-container-apps-deployment)
+4. [GitHub Actions CI/CD](#github-actions-cicd)
+5. [Updating Your App](#updating-your-app)
+6. [Monitoring & Troubleshooting](#monitoring--troubleshooting)
+7. [Cost Estimation](#cost-estimation)
 
 ---
 
@@ -82,541 +86,480 @@ Uploaded and processed files are automatically deleted after 24 hours:
 
 ---
 
-## Azure VM Deployment
+## Azure Container Apps Deployment
 
-This guide will help you deploy PDFTools to an Azure VM for production use with support for multiple concurrent users.
+Azure Container Apps provides **full features including LibreOffice** for Office document conversions, with auto-scaling and managed infrastructure.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Azure Cloud                               │
+│                                                                  │
+│  ┌──────────────────┐    ┌──────────────────────────────────┐  │
+│  │ Container        │    │ Container Apps Environment        │  │
+│  │ Registry (ACR)   │───▶│ ┌────────────────────────────┐   │  │
+│  │                  │    │ │ pdftools Container App     │   │  │
+│  │ pdftools:v1      │    │ │ - Runs your Docker image   │   │  │
+│  │ pdftools:v2      │    │ │ - Auto-scales 1-5 replicas │   │  │
+│  └──────────────────┘    │ │ - HTTPS ingress            │   │  │
+│                          │ └────────────────────────────┘   │  │
+│                          └──────────────────────────────────┘  │
+│                                         │                       │
+│                                         ▼                       │
+│                          ┌──────────────────────────────────┐  │
+│                          │ PostgreSQL Flexible Server       │  │
+│                          │ - pdftools_db database           │  │
+│                          │ - Managed backups                │  │
+│                          └──────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Prerequisites
 
-- Azure account with an active subscription
-- SSH access to your Azure VM
-- Domain name (optional, but recommended)
-
-### System Requirements
-
-**Minimum Recommended Specs:**
-- VM Size: Standard_B2s or larger (2 vCPUs, 4GB RAM)
-- OS: Ubuntu 22.04 LTS
-- Storage: 30GB SSD (minimum)
-- Network: Allow ports 80, 443, and 22
-
-**For High Traffic:**
-- VM Size: Standard_D2s_v3 or larger (2 vCPUs, 8GB RAM)
-- Storage: 50GB+ SSD
-- Consider Load Balancer for multiple instances
-
-## Step 1: Provision Azure VM
+- [ ] Azure CLI installed (`az --version` to check)
+- [ ] Node.js 20+ installed
+- [ ] Logged into Azure (`az login`)
 
 ```bash
-# Create resource group
-az group create --name pdftools-rg --location eastus
+# Install Azure CLI
+# macOS
+brew install azure-cli
 
-# Create VM
-az vm create \
-  --resource-group pdftools-rg \
-  --name pdftools-vm \
-  --image Ubuntu2204 \
-  --size Standard_B2s \
-  --admin-username azureuser \
-  --generate-ssh-keys \
-  --public-ip-sku Standard
- 
-# Open HTTP and HTTPS ports
-az vm open-port --port 80 --resource-group pdftools-rg --name pdftools-vm --priority 1001
-az vm open-port --port 443 --resource-group pdftools-rg --name pdftools-vm --priority 1002
+# Windows
+winget install Microsoft.AzureCLI
+
+# Linux
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+# Login to Azure
+az login
+az account set --subscription "<your-subscription-id>"
 ```
-
-## Step 2: Initial Server Setup
-
-SSH into your VM:
-
-```bash
-ssh azureuser@<your-vm-ip>
-```
-
-Update system packages:
-
-```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-## Step 3: Install Dependencies
-
-### Install Node.js
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version  # Should show v20.x
-```
-
-### Install PostgreSQL
-
-```bash
-sudo apt install -y postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-
-# Create database and user
-sudo -u postgres psql
-```
-
-In the PostgreSQL prompt:
-
-```sql
-CREATE DATABASE pdftools;
-CREATE USER pdftools_user WITH ENCRYPTED PASSWORD 'your_secure_password';
-GRANT ALL PRIVILEGES ON DATABASE pdftools TO pdftools_user;
-\q
-```
-
-### Install PDF/Image Processing Tools
-
-```bash
-sudo apt install -y \
-  ghostscript \
-  poppler-utils \
-  qpdf \
-  imagemagick \
-  libreoffice \
-  wkhtmltopdf
-```
-
-> **Note about bundled dependencies**: The following are included via `npm install` and do NOT require separate installation:
-> - **TinyMCE Editor** - Bundled locally for offline document editing (GPL license)
-> - **React Image Crop** - Visual image cropping library
-> - **pdf-lib** - PDF manipulation library
-> - **Sharp** - Image processing library
-> 
-> All frontend dependencies are bundled into the production build during `npm run build`.
-
-### Install Nginx
-
-```bash
-sudo apt install -y nginx
-sudo systemctl start nginx
-sudo systemctl enable nginx
-```
-
-## Step 4: Deploy Application
-
-### Clone or Upload Application
-
-```bash
-cd /home/azureuser
-# Option 1: Clone from git
-git clone <your-repo-url> pdftools
-cd pdftools
-
-# Option 2: Upload via SCP from local machine
-# scp -r ./pdftools azureuser@<vm-ip>:/home/azureuser/
-```
-
-### Install Dependencies
-
-```bash
-npm install
-```
-
-### Configure Environment Variables
-
-Create `.env` file:
-
-```bash
-cat > .env << 'EOF'
-NODE_ENV=production
-PORT=5000
-
-# Database
-DATABASE_URL=postgresql://pdftools_user:your_secure_password@localhost:5432/pdftools
-
-# Logging
-LOG_LEVEL=info
-
-# File Upload Limits
-MAX_FILE_SIZE=104857600  # 100MB in bytes
-
-# Session Secret (generate a random string)
-SESSION_SECRET=your_random_session_secret_here
-EOF
-```
-
-Generate a secure session secret:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-### Build Application
-
-```bash
-npm run build
-```
-
-### Push Database Schema
-
-```bash
-npm run db:push
-```
-
-## Step 5: Configure Process Manager (PM2)
-
-Install PM2 globally:
-
-```bash
-sudo npm install -g pm2
-```
-
-Create PM2 ecosystem file:
-
-```bash
-cat > ecosystem.config.js << 'EOF'
-module.exports = {
-  apps: [{
-    name: 'pdftools',
-    script: 'dist/index.cjs',
-    instances: 'max',
-    exec_mode: 'cluster',
-    env: {
-      NODE_ENV: 'production'
-    },
-    max_memory_restart: '1G',
-    error_file: './logs/pm2-error.log',
-    out_file: './logs/pm2-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true
-  }]
-}
-EOF
-```
-
-Start the application:
-
-```bash
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup
-```
-
-Copy and run the command that PM2 outputs to enable startup on boot.
-
-## Step 6: Configure Nginx Reverse Proxy
-
-Create Nginx configuration:
-
-```bash
-sudo cat > /etc/nginx/sites-available/pdftools << 'EOF'
-# Rate limiting
-limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
-limit_req_zone $binary_remote_addr zone=upload_limit:10m rate=5r/s;
-
-# Upstream
-upstream pdftools_backend {
-    least_conn;
-    server 127.0.0.1:5000 max_fails=3 fail_timeout=30s;
-}
-
-server {
-    listen 80;
-    server_name your-domain.com www.your-domain.com;
-    
-    client_max_body_size 100M;
-    
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    
-    # Logging
-    access_log /var/log/nginx/pdftools_access.log;
-    error_log /var/log/nginx/pdftools_error.log;
-    
-    # API endpoints with rate limiting
-    location /api/ {
-        limit_req zone=api_limit burst=20 nodelay;
-        
-        proxy_pass http://pdftools_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # Timeouts for long processing
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-    }
-    
-    # Upload endpoint with stricter rate limiting
-    location /api/jobs {
-        limit_req zone=upload_limit burst=5 nodelay;
-        
-        proxy_pass http://pdftools_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        client_body_timeout 300s;
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-    }
-    
-    # Static files
-    location / {
-        proxy_pass http://pdftools_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-EOF
-```
-
-Enable the site:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/pdftools /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-## Step 7: SSL/TLS with Let's Encrypt (Optional but Recommended)
-
-Install Certbot:
-
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-```
-
-Obtain SSL certificate:
-
-```bash
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com
-```
-
-Certbot will automatically configure Nginx for HTTPS and set up auto-renewal.
-
-## Step 8: Configure Firewall
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
-```
-
-## Step 9: Monitoring and Logging
-
-### View Application Logs
-
-```bash
-# PM2 logs
-pm2 logs pdftools
-
-# Application logs
-tail -f logs/combined.log
-tail -f logs/error.log
-
-# Nginx logs
-sudo tail -f /var/log/nginx/pdftools_access.log
-sudo tail -f /var/log/nginx/pdftools_error.log
-```
-
-### Monitor Application Status
-
-```bash
-pm2 status
-pm2 monit
-```
-
-### Access Metrics
-
-Visit `http://your-domain.com/api/metrics` to see Prometheus-compatible metrics.
-
-## Step 10: Performance Tuning
-
-### PostgreSQL Optimization
-
-Edit `/etc/postgresql/14/main/postgresql.conf`:
-
-```conf
-shared_buffers = 256MB
-effective_cache_size = 1GB
-maintenance_work_mem = 64MB
-checkpoint_completion_target = 0.9
-wal_buffers = 16MB
-default_statistics_target = 100
-random_page_cost = 1.1
-effective_io_concurrency = 200
-work_mem = 5MB
-min_wal_size = 1GB
-max_wal_size = 4GB
-```
-
-Restart PostgreSQL:
-
-```bash
-sudo systemctl restart postgresql
-```
-
-### Node.js Memory Optimization
-
-If you experience memory issues, adjust PM2 configuration:
-
-```javascript
-// In ecosystem.config.js
-max_memory_restart: '2G',  // Increase if needed
-```
-
-## Scaling for Multiple Concurrent Users
-
-### Horizontal Scaling (Multiple Instances)
-
-PM2 cluster mode automatically uses all CPU cores. For more capacity:
-
-1. **Use Azure Load Balancer**: Deploy multiple VMs behind a load balancer
-2. **Shared Database**: All instances connect to the same PostgreSQL database
-3. **Shared File Storage**: Use Azure Blob Storage for uploaded/processed files
-
-### Vertical Scaling (Bigger VM)
-
-Upgrade VM size in Azure portal:
-
-```bash
-az vm resize \
-  --resource-group pdftools-rg \
-  --name pdftools-vm \
-  --size Standard_D4s_v3  # 4 vCPUs, 16GB RAM
-```
-
-## Backup Strategy
-
-### Database Backups
-
-Create daily backup cron job:
-
-```bash
-crontab -e
-```
-
-Add:
-
-```cron
-0 2 * * * pg_dump -U pdftools_user pdftools > /home/azureuser/backups/pdftools_$(date +\%Y\%m\%d).sql
-0 3 * * * find /home/azureuser/backups -name "pdftools_*.sql" -mtime +7 -delete
-```
-
-### Application Backups
-
-```bash
-# Backup application code and config
-tar -czf pdftools-backup-$(date +%Y%m%d).tar.gz \
-  pdftools/ \
-  .env \
-  ecosystem.config.js
-```
-
-## Troubleshooting
-
-### Application Won't Start
-
-```bash
-# Check logs
-pm2 logs pdftools --lines 100
-
-# Check database connection
-psql -U pdftools_user -d pdftools -h localhost
-
-# Check environment variables
-cat .env
-```
-
-### High Memory Usage
-
-```bash
-# Monitor processes
-pm2 monit
-
-# Restart application
-pm2 restart pdftools
-
-# Clear processed files
-rm -rf output_files/*
-rm -rf uploads/*
-```
-
-### Slow Performance
-
-```bash
-# Check database performance
-sudo -u postgres psql -c "SELECT * FROM pg_stat_activity;"
-
-# Check disk space
-df -h
-
-# Check CPU and memory
-htop
-```
-
-## Security Checklist
-
-- [ ] Change default PostgreSQL password
-- [ ] Use strong session secret
-- [ ] Enable HTTPS with SSL certificate
-- [ ] Configure firewall (ufw)
-- [ ] Set up regular security updates
-- [ ] Implement rate limiting (configured in Nginx)
-- [ ] Regular backup schedule
-- [ ] Monitor error logs
-- [ ] Keep dependencies updated
-
-## Maintenance
-
-### Update Application
-
-```bash
-cd /home/azureuser/pdftools
-git pull origin main  # or upload new files
-npm install
-npm run build
-npm run db:push  # if schema changed
-pm2 restart pdftools
-```
-
-### Update System Packages
-
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo reboot  # if kernel updated
-```
-
-## Cost Optimization
-
-1. **Use Azure Reserved Instances**: Save up to 72% with 1-3 year commitments
-2. **Auto-shutdown during off-hours**: Configure via Azure portal
-3. **Optimize file cleanup**: Regularly delete old processed files
-4. **Monitor resource usage**: Adjust VM size based on actual needs
-
-## Support
-
-For issues specific to PDFTools application, check:
-- Application logs: `logs/combined.log`
-- PM2 logs: `pm2 logs`
-- GitHub issues: (your repository)
-
-For Azure-specific issues:
-- Azure Support Portal
-- Azure Documentation: https://docs.microsoft.com/azure/
 
 ---
 
-**Deployment completed!** Your PDFTools application should now be accessible at `https://your-domain.com` and ready to handle multiple concurrent users.
+### Step 1: Build Application Locally
+
+```bash
+npm install
+npm run build
+```
+
+Verify the build:
+```bash
+ls -la dist/
+# Should see index.cjs and public/ folder
+```
+
+---
+
+### Step 2: Create Resource Group
+
+```bash
+az group create --name pdftools-rg --location eastus
+```
+
+---
+
+### Step 3: Create PostgreSQL Database
+
+```bash
+# Create PostgreSQL Flexible Server
+az postgres flexible-server create \
+  --name pdftools-db-server \
+  --resource-group pdftools-rg \
+  --location eastus \
+  --admin-user pdfadmin \
+  --admin-password "YourSecureP@ssw0rd123!" \
+  --sku-name Standard_B1ms \
+  --tier Burstable \
+  --storage-size 32 \
+  --version 15 \
+  --public-access Enabled \
+  --yes
+
+# Create the database
+az postgres flexible-server db create \
+  --resource-group pdftools-rg \
+  --server-name pdftools-db-server \
+  --database-name pdftools_db
+
+# Allow Azure services to connect
+az postgres flexible-server firewall-rule create \
+  --resource-group pdftools-rg \
+  --name pdftools-db-server \
+  --rule-name AllowAzureServices \
+  --start-ip-address 0.0.0.0 \
+  --end-ip-address 0.0.0.0
+
+# Allow your local IP (for running migrations)
+az postgres flexible-server firewall-rule create \
+  --resource-group pdftools-rg \
+  --name pdftools-db-server \
+  --rule-name AllowMyIP \
+  --start-ip-address YOUR_IP_ADDRESS \
+  --end-ip-address YOUR_IP_ADDRESS
+```
+
+**Save your connection string:**
+```
+postgresql://pdfadmin:YourSecureP@ssw0rd123!@pdftools-db-server.postgres.database.azure.com:5432/pdftools_db?sslmode=require
+```
+
+---
+
+### Step 4: Create Container Registry
+
+```bash
+# Create container registry (name must be globally unique, lowercase, no dashes)
+az acr create \
+  --name pdftoolsregistry \
+  --resource-group pdftools-rg \
+  --sku Basic \
+  --admin-enabled true
+
+# Get the registry credentials
+az acr credential show --name pdftoolsregistry --output table
+```
+
+---
+
+### Step 5: Build and Push Docker Image
+
+**Option A: Build in Azure (recommended, no Docker required locally)**
+
+```bash
+az acr build \
+  --registry pdftoolsregistry \
+  --resource-group pdftools-rg \
+  --image pdftools:v1 \
+  --file Dockerfile \
+  .
+```
+
+**Option B: Build locally with Docker**
+
+```bash
+az acr login --name pdftoolsregistry
+docker build -t pdftoolsregistry.azurecr.io/pdftools:v1 .
+docker push pdftoolsregistry.azurecr.io/pdftools:v1
+```
+
+---
+
+### Step 6: Register Container Apps Provider
+
+```bash
+az provider register -n Microsoft.App --wait
+```
+
+---
+
+### Step 7: Create Container Apps Environment
+
+```bash
+az containerapp env create \
+  --name pdftools-env \
+  --resource-group pdftools-rg \
+  --location eastus
+```
+
+This takes 2-3 minutes.
+
+---
+
+### Step 8: Deploy the Container App
+
+```bash
+# Get ACR password
+ACR_PASSWORD=$(az acr credential show --name pdftoolsregistry --query "passwords[0].value" -o tsv)
+
+# Create the container app
+az containerapp create \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --environment pdftools-env \
+  --image pdftoolsregistry.azurecr.io/pdftools:v1 \
+  --registry-server pdftoolsregistry.azurecr.io \
+  --registry-username pdftoolsregistry \
+  --registry-password "$ACR_PASSWORD" \
+  --target-port 8080 \
+  --ingress external \
+  --cpu 1 \
+  --memory 2Gi \
+  --min-replicas 1 \
+  --max-replicas 5 \
+  --secrets "db-url=postgresql://pdfadmin:YourSecureP@ssw0rd123!@pdftools-db-server.postgres.database.azure.com:5432/pdftools_db?sslmode=require" \
+  --env-vars "NODE_ENV=production" "DATABASE_URL=secretref:db-url"
+```
+
+---
+
+### Step 9: Get Your App URL
+
+```bash
+az containerapp show \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --query "properties.configuration.ingress.fqdn" \
+  --output tsv
+```
+
+Your app: `https://pdftools.<random>.eastus.azurecontainerapps.io`
+
+---
+
+### Step 10: Run Database Migrations
+
+Run this locally:
+
+```bash
+export DATABASE_URL="postgresql://pdfadmin:YourSecureP@ssw0rd123!@pdftools-db-server.postgres.database.azure.com:5432/pdftools_db?sslmode=require"
+npm run db:push
+```
+
+---
+
+### Step 11: Verify Deployment
+
+```bash
+# Check app status
+az containerapp show --name pdftools --resource-group pdftools-rg --query "properties.runningStatus"
+
+# View logs
+az containerapp logs show --name pdftools --resource-group pdftools-rg --follow
+
+# Test health endpoint
+curl https://your-app-url.azurecontainerapps.io/api/health
+```
+
+---
+
+## GitHub Actions CI/CD
+
+Automate deployments on every push to main.
+
+### Step 1: Create Service Principal
+
+```bash
+az ad sp create-for-rbac \
+  --name "github-actions-pdftools" \
+  --role contributor \
+  --scopes /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/pdftools-rg \
+  --sdk-auth
+```
+
+Save the JSON output.
+
+### Step 2: Add GitHub Secret
+
+1. Go to your GitHub repo → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `AZURE_CREDENTIALS`
+4. Value: Paste the entire JSON output from Step 1
+
+### Step 3: Create Workflow File
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Build and Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AZURE_CONTAINER_REGISTRY: pdftoolsregistry
+  CONTAINER_APP_NAME: pdftools
+  RESOURCE_GROUP: pdftools-rg
+  IMAGE_NAME: pdftools
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and push image to ACR
+        run: |
+          az acr build \
+            --registry ${{ env.AZURE_CONTAINER_REGISTRY }} \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --image ${{ env.IMAGE_NAME }}:latest \
+            --file Dockerfile \
+            .
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+```
+
+Now every push to `main` automatically deploys to Azure.
+
+---
+
+## Updating Your App
+
+### Manual Update
+
+```bash
+# 1. Build locally
+npm run build
+
+# 2. Build and push new image
+az acr build \
+  --registry pdftoolsregistry \
+  --resource-group pdftools-rg \
+  --image pdftools:v2 \
+  --file Dockerfile \
+  .
+
+# 3. Update container app
+az containerapp update \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --image pdftoolsregistry.azurecr.io/pdftools:v2
+```
+
+### Update Environment Variables
+
+```bash
+az containerapp update \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --set-env-vars "NEW_VAR=value"
+```
+
+### Update Secrets
+
+```bash
+az containerapp secret set \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --secrets "db-url=NEW_CONNECTION_STRING"
+```
+
+---
+
+## Monitoring & Troubleshooting
+
+### View Logs
+
+```bash
+# Stream live logs
+az containerapp logs show --name pdftools --resource-group pdftools-rg --follow
+
+# View recent logs
+az containerapp logs show --name pdftools --resource-group pdftools-rg --tail 100
+```
+
+### Check App Status
+
+```bash
+az containerapp show --name pdftools --resource-group pdftools-rg --query "properties.runningStatus"
+```
+
+### Health Check
+
+```bash
+curl https://your-app-url.azurecontainerapps.io/api/health
+```
+
+### Restart App
+
+```bash
+az containerapp revision restart --name pdftools --resource-group pdftools-rg --revision $(az containerapp revision list --name pdftools --resource-group pdftools-rg --query "[0].name" -o tsv)
+```
+
+### Scale App
+
+```bash
+az containerapp update \
+  --name pdftools \
+  --resource-group pdftools-rg \
+  --min-replicas 2 \
+  --max-replicas 10
+```
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Database connection failed | Check `DATABASE_URL` format includes `?sslmode=require` |
+| App not starting | Check logs with `az containerapp logs show` |
+| Out of memory | Increase `--memory` in container app update |
+| Slow performance | Increase `--cpu` or scale replicas |
+
+---
+
+## Cost Estimation
+
+### Container Apps Setup
+
+| Resource | Cost |
+|----------|------|
+| Container Apps | ~$50-100/month (based on usage) |
+| Container Registry (Basic) | ~$5/month |
+| PostgreSQL Flexible Server (B1ms) | ~$15/month |
+| **Total** | **~$70-120/month** |
+
+### Tips to Reduce Costs
+
+- Set `--min-replicas 0` for consumption-based pricing (with cold start)
+- Use reserved instances for PostgreSQL
+- Monitor and right-size resources based on actual usage
+
+---
+
+## Quick Reference
+
+```bash
+# View all resources
+az resource list --resource-group pdftools-rg --output table
+
+# Get app URL
+az containerapp show --name pdftools --resource-group pdftools-rg --query "properties.configuration.ingress.fqdn" -o tsv
+
+# View container app details
+az containerapp show --name pdftools --resource-group pdftools-rg
+
+# Delete everything (be careful!)
+az group delete --name pdftools-rg --yes
+```
+
+---
+
+## Support
+
+- **Application logs**: `az containerapp logs show`
+- **Health endpoint**: `/api/health`
+- **Metrics endpoint**: `/api/metrics`
+
+For Azure issues:
+- [Azure Container Apps Documentation](https://docs.microsoft.com/azure/container-apps/)
+- [Azure PostgreSQL Documentation](https://docs.microsoft.com/azure/postgresql/)
