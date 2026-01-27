@@ -111,23 +111,37 @@ app.use((req, res, next) => {
     },
   );
 
-  process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down gracefully...');
+  // Track shutdown state to prevent duplicate handling
+  let isShuttingDown = false;
+  
+  const gracefulShutdown = (signal: string) => {
+    if (isShuttingDown) {
+      logger.info(`${signal} received again, forcing exit...`);
+      process.exit(1);
+    }
+    
+    isShuttingDown = true;
+    logger.info(`${signal} received, shutting down gracefully...`);
     cleanupService.stop();
+    
+    // Force close all connections after 3 seconds
+    const forceExitTimeout = setTimeout(() => {
+      logger.warn('Graceful shutdown timeout, forcing exit...');
+      process.exit(1);
+    }, 3000);
+    
     httpServer.close(() => {
+      clearTimeout(forceExitTimeout);
       logger.info('Server closed');
       process.exit(0);
     });
-  });
+    
+    // Close all existing connections
+    httpServer.closeAllConnections?.();
+  };
 
-  process.on('SIGINT', () => {
-    logger.info('SIGINT received, shutting down gracefully...');
-    cleanupService.stop();
-    httpServer.close(() => {
-      logger.info('Server closed');
-      process.exit(0);
-    });
-  });
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception - Server will restart:', { 
