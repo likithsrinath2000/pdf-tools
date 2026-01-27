@@ -22,10 +22,7 @@ import "tinymce/plugins/fullscreen";
 import "tinymce/plugins/insertdatetime";
 import "tinymce/plugins/media";
 import "tinymce/plugins/table";
-import "tinymce/plugins/help";
 import "tinymce/plugins/wordcount";
-import "tinymce/plugins/emoticons";
-import "tinymce/plugins/emoticons/js/emojis";
 import "tinymce/plugins/codesample";
 import "tinymce/plugins/quickbars";
 import "tinymce/plugins/pagebreak";
@@ -121,7 +118,7 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
           initialValue={initialContent || "<p>Start typing your document here...</p>"}
           init={{
             height: isFullscreen ? "calc(100vh - 180px)" : 600,
-            menubar: "file edit view insert format tools table help",
+            menubar: "file edit view insert format tools table",
             skin: false,
             content_css: false,
             plugins: [
@@ -140,9 +137,7 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
               "insertdatetime",
               "media",
               "table",
-              "help",
               "wordcount",
-              "emoticons",
               "codesample",
               "quickbars",
               "pagebreak",
@@ -157,7 +152,7 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
               "alignleft aligncenter alignright alignjustify | " +
               "bullist numlist outdent indent | " +
               "link image media table | " +
-              "removeformat | help",
+              "removeformat",
             toolbar_mode: "sliding",
             font_family_formats:
               "Arial=arial,helvetica,sans-serif; " +
