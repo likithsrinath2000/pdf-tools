@@ -122,6 +122,8 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
           init={{
             height: isFullscreen ? "calc(100vh - 180px)" : 600,
             menubar: "file edit view insert format tools table help",
+            skin: false,
+            content_css: false,
             plugins: [
               "advlist",
               "autolink",
@@ -252,7 +254,6 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
             },
             branding: false,
             promotion: false,
-            skin: "oxide",
             icons: "default",
             statusbar: true,
             elementpath: true,
