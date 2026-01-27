@@ -30,7 +30,95 @@ import "tinymce/plugins/nonbreaking";
 import "tinymce/plugins/visualchars";
 import "tinymce/plugins/save";
 import "tinymce/plugins/directionality";
-import "tinymce/skins/ui/oxide/skin.css";
+
+const tinymceInlineStyles = `
+.tox .tox-toolbar, .tox .tox-toolbar__overflow, .tox .tox-toolbar__primary {
+  background-color: #f4f4f4 !important;
+  border-bottom: 1px solid #e3e3e3 !important;
+}
+.tox .tox-toolbar__group {
+  border-right: 1px solid #e3e3e3 !important;
+  padding: 0 4px !important;
+}
+.tox .tox-tbtn {
+  color: #333 !important;
+  border-radius: 4px !important;
+  margin: 2px !important;
+}
+.tox .tox-tbtn:hover, .tox .tox-tbtn--enabled {
+  background-color: #e0e0e0 !important;
+}
+.tox .tox-tbtn--select {
+  min-width: 80px !important;
+}
+.tox .tox-split-button:hover {
+  box-shadow: none !important;
+}
+.tox .tox-edit-area {
+  border: none !important;
+}
+.tox .tox-edit-area__iframe {
+  background-color: #fff !important;
+}
+.tox .tox-statusbar {
+  background-color: #f4f4f4 !important;
+  border-top: 1px solid #e3e3e3 !important;
+}
+.tox .tox-menubar {
+  background-color: #f4f4f4 !important;
+  border-bottom: 1px solid #e3e3e3 !important;
+}
+.tox .tox-mbtn {
+  color: #333 !important;
+}
+.tox .tox-mbtn:hover {
+  background-color: #e0e0e0 !important;
+}
+.tox-tinymce {
+  border: 1px solid #e3e3e3 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+.tox .tox-editor-header {
+  box-shadow: none !important;
+  border-bottom: 1px solid #e3e3e3 !important;
+}
+.tox .tox-menu {
+  background-color: #fff !important;
+  border: 1px solid #e3e3e3 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+}
+.tox .tox-collection__item {
+  color: #333 !important;
+}
+.tox .tox-collection__item--active {
+  background-color: #e8f4fc !important;
+}
+.tox .tox-dialog {
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2) !important;
+}
+.tox .tox-dialog__header {
+  background-color: #f4f4f4 !important;
+  border-bottom: 1px solid #e3e3e3 !important;
+}
+.tox .tox-dialog__footer {
+  background-color: #f4f4f4 !important;
+  border-top: 1px solid #e3e3e3 !important;
+}
+.tox .tox-button {
+  border-radius: 6px !important;
+}
+.tox .tox-button--primary {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+.tox .tox-button--primary:hover {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+`;
 
 interface DocumentEditorProps {
   onOptionsChange: (options: any) => void;
@@ -45,6 +133,20 @@ export function DocumentEditor({ onOptionsChange, initialContent = "" }: Documen
   const onOptionsChangeRef = useRef(onOptionsChange);
 
   onOptionsChangeRef.current = onOptionsChange;
+
+  useEffect(() => {
+    const styleId = "tinymce-inline-styles";
+    if (!document.getElementById(styleId)) {
+      const styleEl = document.createElement("style");
+      styleEl.id = styleId;
+      styleEl.textContent = tinymceInlineStyles;
+      document.head.appendChild(styleEl);
+    }
+    return () => {
+      const el = document.getElementById(styleId);
+      if (el) el.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (isReady && content) {
