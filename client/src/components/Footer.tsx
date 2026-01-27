@@ -1,4 +1,5 @@
 import { memo } from "react";
+import logoImage from "@/assets/logo-humorous.png";
 
 /**
  * Footer Component - Memoized for Performance
@@ -14,7 +15,7 @@ export const Footer = memo(function Footer() {
         <div className="flex flex-col items-center md:items-start gap-4">
           <div className="flex items-center gap-3">
              <img 
-               src="/src/assets/logo-humorous.png" 
+               src={logoImage} 
                alt="Cool PDF Mascot" 
                className="w-8 h-8 object-contain hover:rotate-12 transition-transform"
              />

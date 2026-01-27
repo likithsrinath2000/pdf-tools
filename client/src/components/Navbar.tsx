@@ -26,6 +26,7 @@ import { TOOLS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Menu } from "lucide-react";
 import { LanguageSelector } from "./LanguageSelector";
+import logoImage from "@/assets/logo-humorous.png";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -49,7 +50,7 @@ export function Navbar() {
       }}>
         <div className="flex items-center gap-3 cursor-pointer group">
           <img 
-            src="/src/assets/logo-humorous.png" 
+            src={logoImage} 
             alt="Cool PDF Mascot" 
             className="w-10 h-10 object-contain group-hover:scale-110 transition-transform group-hover:rotate-12"
           />
