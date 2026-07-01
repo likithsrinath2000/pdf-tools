@@ -65,6 +65,8 @@ if (process.env.NODE_ENV === "production") {
   app.use(compression());
 }
 
+app.set('trust proxy', 1);
+
 // Global API rate limit (per IP). Set high enough that a long-running job
 // polled every second (~900 requests / 15 min) plus normal browsing/download
 // traffic stays well under the cap; the heavy work is throttled separately at
@@ -73,9 +75,6 @@ app.use("/api", rateLimit({
   windowMs: 15 * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX || "3000", 10),
 }));
-
-app.set('trust proxy', 1);
-
 httpServer.keepAliveTimeout = 65000;
 httpServer.headersTimeout = 66000;
 httpServer.maxHeadersCount = 100;
