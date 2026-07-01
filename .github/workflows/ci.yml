@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+# Least-privilege token: CI only needs to read the repo contents.
+permissions:
+  contents: read
+
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
