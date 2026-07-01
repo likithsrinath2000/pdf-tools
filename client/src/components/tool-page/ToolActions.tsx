@@ -136,6 +136,10 @@ interface DownloadActionsProps {
   onBackToEdit: () => void;
   onStartOver: () => void;
   onDelete: () => void;
+  /** Server result already downloaded and removed from the server. */
+  alreadyDownloaded?: boolean;
+  /** Result was produced in the browser and can be re-downloaded freely. */
+  isClientSide?: boolean;
 }
 
 /**
@@ -147,11 +151,50 @@ const DownloadActions = React.memo(function DownloadActions({
   onBackToEdit,
   onStartOver,
   onDelete,
+  alreadyDownloaded = false,
+  isClientSide = false,
 }: DownloadActionsProps) {
+  // A server-side file is deleted right after download and cannot be fetched
+  // again. Swap the UI to reflect that instead of showing a dead button.
+  if (alreadyDownloaded && !isClientSide) {
+    return (
+      <div>
+        <h3 className="text-2xl font-bold mb-2">Downloaded</h3>
+        <p className="text-muted-foreground mb-8">
+          Your file was downloaded and removed from our servers for your privacy.
+          It can no longer be downloaded — process it again if you need another copy.
+        </p>
+
+        <div className="space-y-4">
+          <Button
+            size="lg"
+            onClick={onStartOver}
+            className="w-full h-14 text-lg rounded-xl shadow-xl shadow-primary/20 hover:scale-[1.02] transition-transform bg-slate-900 hover:bg-slate-800"
+            data-testid="button-start-over"
+          >
+            <Plus className="mr-2 h-5 w-5" /> Process a New File
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onBackToEdit}
+            className="w-full h-12 text-base rounded-xl border-2 hover:bg-slate-50"
+            data-testid="button-back-to-edit"
+          >
+            <ArrowLeft className="mr-2 h-5 w-5" /> Back to Edit Options
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h3 className="text-2xl font-bold mb-2">Task Completed!</h3>
-      <p className="text-muted-foreground mb-8">Your files have been processed successfully.</p>
+      <p className="text-muted-foreground mb-8">
+        {isClientSide
+          ? "Processed right in your browser — download it as many times as you like."
+          : "Your files have been processed successfully."}
+      </p>
       
       <div className="space-y-4">
         {/* Primary download button */}

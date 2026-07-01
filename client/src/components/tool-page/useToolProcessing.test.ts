@@ -262,6 +262,8 @@ describe("useToolProcessing", () => {
       await result.current.handleDownload("compress-pdf");
     });
     expect(mocks.apiClient.downloadJob).toHaveBeenCalledWith("job-1", expect.stringMatching(/^compress-pdf_\d+\.pdf$/));
+    // Server file is purged after download, so the hook flags it as consumed.
+    expect(result.current.serverDownloaded).toBe(true);
 
     await act(async () => {
       await result.current.handleDeleteFile();

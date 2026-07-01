@@ -89,6 +89,32 @@ describe("ToolActions", () => {
     expect(handlers.onDelete).toHaveBeenCalledTimes(1);
   });
 
+  it("shows a purged state (no download button) after a server file was downloaded", async () => {
+    const user = userEvent.setup();
+    const handlers = {
+      onDownload: vi.fn(),
+      onBackToEdit: vi.fn(),
+      onStartOver: vi.fn(),
+      onDelete: vi.fn(),
+    };
+    render(<DownloadActions {...handlers} alreadyDownloaded isClientSide={false} />);
+
+    expect(screen.getByRole("heading", { name: "Downloaded" })).toBeInTheDocument();
+    // The dead download button is gone; only start-over / back-to-edit remain.
+    expect(screen.queryByTestId("button-download")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("button-delete")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("button-start-over"));
+    expect(handlers.onStartOver).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the download button for client-side results even after downloading", async () => {
+    const handlers = { onDownload: vi.fn(), onBackToEdit: vi.fn(), onStartOver: vi.fn(), onDelete: vi.fn() };
+    // Client-side results live in the browser and can be re-downloaded.
+    render(<DownloadActions {...handlers} alreadyDownloaded isClientSide />);
+    expect(screen.getByRole("heading", { name: "Task Completed!" })).toBeInTheDocument();
+    expect(screen.getByTestId("button-download")).toBeInTheDocument();
+  });
+
   it("fires error and create action callbacks and respects disabled state", async () => {
     const user = userEvent.setup();
     const onTryAgain = vi.fn();

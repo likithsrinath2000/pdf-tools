@@ -8,17 +8,21 @@ export class ImageService {
     outputPath: string,
     quality: number
   ): Promise<void> {
+    // Coerce/clamp to a valid integer 1-100; sharp throws otherwise and a
+    // client could send a preset string (e.g. "medium") or out-of-range value.
+    const parsed = Math.round(Number(quality));
+    const q = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 80;
     const ext = path.extname(inputPath).toLowerCase();
     let image = sharp(inputPath);
     
     if (ext === '.jpg' || ext === '.jpeg') {
-      await image.jpeg({ quality }).toFile(outputPath);
+      await image.jpeg({ quality: q }).toFile(outputPath);
     } else if (ext === '.png') {
-      await image.png({ quality }).toFile(outputPath);
+      await image.png({ quality: q }).toFile(outputPath);
     } else if (ext === '.webp') {
-      await image.webp({ quality }).toFile(outputPath);
+      await image.webp({ quality: q }).toFile(outputPath);
     } else {
-      await image.jpeg({ quality }).toFile(outputPath);
+      await image.jpeg({ quality: q }).toFile(outputPath);
     }
   }
 

@@ -3,8 +3,29 @@ import path from 'path';
 import { logger, logCleanup } from '../logger';
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
-const FILE_MAX_AGE_MS = parseInt(process.env.FILE_MAX_AGE_HOURS || '24') * 60 * 60 * 1000;
-const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '60') * 60 * 1000;
+// Processed results live here. This MUST be cleaned too — otherwise output
+// documents (which can be sensitive) accumulate forever and could be served to
+// whoever holds the job id.
+const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(process.cwd(), 'output_files');
+
+/**
+ * Effective retention. Defaults to 5 minutes. `FILE_MAX_AGE_MINUTES` takes
+ * precedence; the legacy `FILE_MAX_AGE_HOURS` is still honored when minutes is
+ * not set.
+ */
+function resolveMaxAgeMs(): number {
+  if (process.env.FILE_MAX_AGE_MINUTES) {
+    return parseInt(process.env.FILE_MAX_AGE_MINUTES, 10) * 60 * 1000;
+  }
+  if (process.env.FILE_MAX_AGE_HOURS) {
+    return parseInt(process.env.FILE_MAX_AGE_HOURS, 10) * 60 * 60 * 1000;
+  }
+  return 5 * 60 * 1000;
+}
+
+const FILE_MAX_AGE_MS = resolveMaxAgeMs();
+// Sweep frequently so files don't linger much past their retention window.
+const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '1', 10) * 60 * 1000;
 
 export class CleanupService {
   private intervalId: NodeJS.Timeout | null = null;
@@ -14,14 +35,41 @@ export class CleanupService {
     let bytesFreed = 0;
     const now = Date.now();
 
+    // Clean every managed root (uploads + processed outputs).
+    for (const root of [UPLOADS_DIR, OUTPUT_DIR]) {
+      const result = await this.cleanupDirectory(root, now, false);
+      filesDeleted += result.filesDeleted;
+      bytesFreed += result.bytesFreed;
+    }
+
+    if (filesDeleted > 0) {
+      logCleanup(filesDeleted, bytesFreed);
+    }
+
+    return { filesDeleted, bytesFreed };
+  }
+
+  /**
+   * Recursively removes files older than the retention window. `isSubdir`
+   * distinguishes managed roots (never removed even when empty) from per-job
+   * subdirectories (removed once empty).
+   */
+  private async cleanupDirectory(
+    dirPath: string,
+    now: number,
+    isSubdir: boolean
+  ): Promise<{ filesDeleted: number; bytesFreed: number }> {
+    let filesDeleted = 0;
+    let bytesFreed = 0;
+
     try {
-      const entries = await fs.readdir(UPLOADS_DIR, { withFileTypes: true });
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
       for (const entry of entries) {
-        const entryPath = path.join(UPLOADS_DIR, entry.name);
+        const entryPath = path.join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
-          const result = await this.cleanupDirectory(entryPath, now);
+          const result = await this.cleanupDirectory(entryPath, now, true);
           filesDeleted += result.filesDeleted;
           bytesFreed += result.bytesFreed;
         } else if (entry.isFile()) {
@@ -33,44 +81,24 @@ export class CleanupService {
         }
       }
 
-      if (filesDeleted > 0) {
-        logCleanup(filesDeleted, bytesFreed);
-      }
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') {
-        logger.error('Cleanup error:', { error: error.message });
-      }
-    }
-
-    return { filesDeleted, bytesFreed };
-  }
-
-  private async cleanupDirectory(dirPath: string, now: number): Promise<{ filesDeleted: number; bytesFreed: number }> {
-    let filesDeleted = 0;
-    let bytesFreed = 0;
-
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const entryPath = path.join(dirPath, entry.name);
-
-        if (entry.isFile()) {
-          const result = await this.cleanupFile(entryPath, now);
-          if (result) {
-            filesDeleted += 1;
-            bytesFreed += result;
-          }
+      // Remove now-empty per-job subdirectories (never the managed roots).
+      if (isSubdir) {
+        const remainingEntries = await fs.readdir(dirPath);
+        if (remainingEntries.length === 0) {
+          await fs.rmdir(dirPath);
+          logger.debug(`Removed empty directory: ${dirPath}`);
         }
       }
-
-      const remainingEntries = await fs.readdir(dirPath);
-      if (remainingEntries.length === 0) {
-        await fs.rmdir(dirPath);
-        logger.debug(`Removed empty directory: ${dirPath}`);
-      }
     } catch (error: any) {
-      logger.error('Directory cleanup error:', { dirPath, error: error.message });
+      // A managed root that doesn't exist yet is not an error.
+      if (error.code === 'ENOENT') {
+        return { filesDeleted, bytesFreed };
+      }
+      if (isSubdir) {
+        logger.error('Directory cleanup error:', { dirPath, error: error.message });
+      } else {
+        logger.error('Cleanup error:', { error: error.message });
+      }
     }
 
     return { filesDeleted, bytesFreed };
@@ -109,7 +137,7 @@ export class CleanupService {
       this.cleanupOldFiles();
     }, CLEANUP_INTERVAL_MS);
 
-    logger.info(`Cleanup service started: ${FILE_MAX_AGE_MS / 3600000}h max age, ${CLEANUP_INTERVAL_MS / 60000}min interval`);
+    logger.info(`Cleanup service started: ${FILE_MAX_AGE_MS / 60000}min max age, ${CLEANUP_INTERVAL_MS / 60000}min interval`);
   }
 
   stop(): void {

@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y \
     qpdf \
     imagemagick \
     libreoffice \
+    default-jre-headless \
     wkhtmltopdf \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*

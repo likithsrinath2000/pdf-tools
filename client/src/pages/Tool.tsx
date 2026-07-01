@@ -99,6 +99,7 @@ export default function ToolPage() {
     setPdfNotEncrypted,
     checkingEncryption,
     processedClientSide,
+    serverDownloaded,
     processingPrediction,
     handleFilesSelected,
     removeFile,
@@ -496,6 +497,8 @@ export default function ToolPage() {
             onBackToEdit={() => setStage(isCreateTool ? "upload" : "files-selected")}
             onStartOver={handleReset}
             onDelete={handleDeleteFile}
+            alreadyDownloaded={serverDownloaded}
+            isClientSide={processedClientSide}
           />
         </div>
       );

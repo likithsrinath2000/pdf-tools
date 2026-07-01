@@ -32,6 +32,11 @@ export function SplitEditor({ files, onOptionsChange }: SplitEditorProps) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const processedFileRef = useRef<string>("");
+  // Keep the latest callback in a ref so parent re-renders (which pass a new
+  // inline function each time) don't retrigger the effect below into an
+  // infinite update loop (React error #185).
+  const onOptionsChangeRef = useRef(onOptionsChange);
+  onOptionsChangeRef.current = onOptionsChange;
 
   const renderPageToCanvas = useCallback(async (
     pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -84,19 +89,20 @@ export function SplitEditor({ files, onOptionsChange }: SplitEditorProps) {
   }, [files, activeTab, renderPageToCanvas]);
 
   useEffect(() => {
-    if (!onOptionsChange) return;
+    const cb = onOptionsChangeRef.current;
+    if (!cb) return;
     
     if (activeTab === "extract") {
       const pagesToExtract = pages.filter(p => p.selected).map(p => p.pageNumber);
-      onOptionsChange({ pagesToExtract, mode: "extract" });
+      cb({ pagesToExtract, mode: "extract" });
     } else {
       if (rangeType === "custom") {
-        onOptionsChange({ ranges: customRanges, mode: "ranges" });
+        cb({ ranges: customRanges, mode: "ranges" });
       } else {
-        onOptionsChange({ splitEvery: parseInt(splitEvery) || 1, mode: "fixed" });
+        cb({ splitEvery: parseInt(splitEvery) || 1, mode: "fixed" });
       }
     }
-  }, [activeTab, pages, rangeType, customRanges, splitEvery, onOptionsChange]);
+  }, [activeTab, pages, rangeType, customRanges, splitEvery]);
 
   const togglePage = (pageNumber: number) => {
     setPages(prev => prev.map(p => 
