@@ -5,6 +5,15 @@ on:
     branches: [main]
   workflow_dispatch:  # Allow manual trigger
 
+# Least-privilege token (deploy auth is via AZURE_CREDENTIALS, not the GITHUB_TOKEN).
+permissions:
+  contents: read
+
+# Never let two deploys of main race; only the newest commit should reach prod.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
 env:
   AZURE_CONTAINER_REGISTRY: pdftoolsregistry
   RESOURCE_GROUP: pdftools-rg
@@ -27,6 +36,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Quality gate: never deploy a commit that doesn't type-check, pass tests,
+      # and build. This protects prod even if a change reaches main without CI.
+      - name: Type-check
+        run: npm run check
+
+      - name: Run tests
+        run: npm test
 
       - name: Build application
         run: npm run build
