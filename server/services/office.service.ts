@@ -7,8 +7,23 @@ import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import officegen from 'officegen';
 import { createWriteStream } from 'fs';
+import { positiveIntEnv } from '../utils/env';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Wall-clock ceiling for external CLI tools (LibreOffice, poppler). Untrusted
+ * documents must never be able to pin a worker indefinitely. Override with
+ * CLI_TIMEOUT_MS.
+ */
+const EXEC_TIMEOUT_MS = positiveIntEnv(process.env.CLI_TIMEOUT_MS, 120000);
+
+/**
+ * Upper bound on HTML/text input processed on the main thread (html-to-pdf,
+ * create-document). Guards against a maximally large body blocking the event
+ * loop during synchronous string manipulation.
+ */
+const MAX_HTML_CHARS = 500_000;
 
 export class OfficeService {
   /**
@@ -39,7 +54,7 @@ export class OfficeService {
         '--convert-to', convertTo,
         '--outdir', workDir,
         inputPath,
-      ]);
+      ], { timeout: EXEC_TIMEOUT_MS });
       const produced = (await fs.readdir(workDir))
         .find(f => f !== 'profile' && f.toLowerCase().endsWith(ext.toLowerCase()));
       if (!produced) {
@@ -123,7 +138,7 @@ export class OfficeService {
     try {
       await fs.mkdir(tempDir, { recursive: true });
       
-      await execFileAsync('pdftoppm', ['-png', '-r', '150', inputPath, `${tempDir}/page`]);
+      await execFileAsync('pdftoppm', ['-png', '-r', '150', inputPath, `${tempDir}/page`], { timeout: EXEC_TIMEOUT_MS });
       
       const files = await fs.readdir(tempDir);
       const pngFiles = files.filter(f => f.endsWith('.png')).sort();
@@ -161,6 +176,10 @@ export class OfficeService {
   }
 
   async htmlToPDF(htmlContent: string, outputPath: string): Promise<void> {
+    if (typeof htmlContent === 'string' && htmlContent.length > MAX_HTML_CHARS) {
+      throw new Error(`Content is too large. Please keep it under ${MAX_HTML_CHARS.toLocaleString('en-US')} characters.`);
+    }
+
     const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
     
     const doc = await PDFDocument.create();
@@ -201,6 +220,9 @@ export class OfficeService {
   }
 
   private extractTextFromHtml(html: string): string {
+    if (typeof html === 'string' && html.length > MAX_HTML_CHARS) {
+      html = html.slice(0, MAX_HTML_CHARS);
+    }
     let text = html
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')

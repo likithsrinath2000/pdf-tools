@@ -46,6 +46,10 @@ const mocks = vi.hoisted(() => {
   const fsPromises = {
     mkdir: vi.fn(async () => {}), unlink: vi.fn(async () => {}), stat: vi.fn(async () => ({ size: 4096 })),
     readFile: vi.fn(async () => Buffer.from("file")), writeFile: vi.fn(async () => {}),
+    open: vi.fn(async () => ({
+      read: vi.fn(async (buf: Buffer) => { Buffer.from("%PDF-1.4").copy(buf); return { bytesRead: 8 }; }),
+      close: vi.fn(async () => {}),
+    })),
   };
   return { jobs, storage, pdfService, imageService, officeService, fsPromises, resetSeq: () => { seq = 0; } };
 });
@@ -89,7 +93,7 @@ function makeApp() {
 
 async function postJob(app: express.Express, toolId: string, options: any = {}, withFile = true) {
   let req = request(app).post("/jobs").field("toolId", toolId).field("options", JSON.stringify(options));
-  if (withFile) req = req.attach("files", Buffer.from("pdf"), { filename: "input.pdf", contentType: "application/pdf" });
+  if (withFile) req = req.attach("files", Buffer.from("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"), { filename: "input.pdf", contentType: "application/pdf" });
   return req;
 }
 
@@ -106,6 +110,12 @@ describe("job routes", () => {
     mocks.resetSeq();
     fsSync.rmSync("uploads", { recursive: true, force: true });
     fsSync.mkdirSync("uploads", { recursive: true });
+    // Restore the default signature reader (valid PDF) each test, since a test
+    // may override open() and clearAllMocks() does not reset implementations.
+    mocks.fsPromises.open.mockImplementation(async () => ({
+      read: async (buf: Buffer) => { Buffer.from("%PDF-1.4").copy(buf); return { bytesRead: 8 }; },
+      close: async () => {},
+    }));
     router = (await import("./job.routes")).default;
   });
 
@@ -125,7 +135,7 @@ describe("job routes", () => {
     expect(security.rateLimit).toHaveBeenCalledWith(expect.objectContaining({ windowMs: 900000 }));
 
     const badJson = await request(app).post("/jobs").field("toolId", "html-to-pdf").field("options", "{");
-    expect(badJson.status).toBe(500);
+    expect(badJson.status).toBe(400);
   });
 
   it("gets jobs and purges output+inputs after a successful download", async () => {
@@ -195,13 +205,32 @@ describe("job routes", () => {
     expect(mocks.fsPromises.writeFile).toHaveBeenCalled();
   });
 
-  it("records processing failures for missing password and unknown tools", async () => {
+  it("skips signature validation for no-file tools but enforces it for file tools", async () => {
+    const app = makeApp();
+    // Uploaded content is HTML (no accepted magic-byte signature).
+    mocks.fsPromises.open.mockResolvedValue({
+      read: async (buf: Buffer) => { Buffer.from("<html><body>hi</body>").copy(buf); return { bytesRead: 16 }; },
+      close: async () => {},
+    } as any);
+
+    // html-to-pdf ignores the upload and reads options -> still succeeds.
+    const noFile = await postJob(app, "html-to-pdf", { htmlContent: "<p>hi</p>" }, true);
+    expect(noFile.status).toBe(200);
+
+    // A file-consuming tool rejects the same non-PDF upload.
+    const fileTool = await postJob(app, "merge-pdf", {}, true);
+    expect(fileTool.status).toBe(400);
+  });
+
+  it("rejects unknown tools up-front and records missing-password failures", async () => {
     const app = makeApp();
     expect((await postJob(app, "protect-pdf", {}, true)).status).toBe(200);
-    expect((await postJob(app, "unknown-tool", {}, true)).status).toBe(200);
+    // Unknown tools are rejected before any job row or file processing.
+    const unknown = await postJob(app, "unknown-tool", {}, true);
+    expect(unknown.status).toBe(400);
     await flush();
     expect(mocks.storage.updateJobError).toHaveBeenCalledWith(expect.any(String), "A password is required to protect this PDF.");
-    expect(mocks.storage.updateJobError).toHaveBeenCalledWith(expect.any(String), "Unknown tool: unknown-tool");
+    expect(mocks.storage.createJob).not.toHaveBeenCalledWith(expect.objectContaining({ toolId: "unknown-tool" }));
   });
 
   it("redacts secrets in the persisted job while processing with the real password", async () => {

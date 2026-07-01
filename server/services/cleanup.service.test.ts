@@ -115,6 +115,26 @@ describe('CleanupService', () => {
     expect(loggerMocks.logger.error).toHaveBeenCalledWith('Directory cleanup error:', expect.objectContaining({ dirPath: '/uploads/bad' }));
   });
 
+  it('invokes the injected job-record purger and logs its own failures', async () => {
+    const { CleanupService } = await loadService();
+    fsMocks.readdir.mockResolvedValue([]);
+
+    // Happy path: purger called with a cutoff Date; a positive count is logged.
+    const purger = vi.fn(async () => 3);
+    const service = new CleanupService();
+    service.setJobRecordPurger(purger);
+    await service.cleanupOldFiles();
+    expect(purger).toHaveBeenCalledWith(expect.any(Date));
+    expect(loggerMocks.logger.debug).toHaveBeenCalledWith(expect.stringContaining('3 stale job record'));
+
+    // Failure path: a purger error is caught and logged, never thrown.
+    const failing = vi.fn(async () => { throw new Error('db down'); });
+    const service2 = new CleanupService();
+    service2.setJobRecordPurger(failing);
+    await expect(service2.cleanupOldFiles()).resolves.toEqual({ filesDeleted: 0, bytesFreed: 0 });
+    expect(loggerMocks.logger.error).toHaveBeenCalledWith('Job record cleanup error:', { error: 'db down' });
+  });
+
   it('starts once, runs periodic cleanup, and stops', async () => {
     vi.useFakeTimers();
     const { CleanupService } = await loadService();

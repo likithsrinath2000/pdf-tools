@@ -1,5 +1,4 @@
 import { Router } from "express";
-import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { storage } from "../storage";
@@ -10,14 +9,14 @@ import { pdfService } from "../services/pdf.service";
 import { imageService } from "../services/image.service";
 import { officeService } from "../services/office.service";
 import { rateLimit } from "../middleware/security";
+import { createUpload, runUpload, validateUploadedFiles } from "../middleware/upload";
+import { sanitizeErrorMessage, sanitizeJobForClient } from "../utils/sanitize";
 
 const router = Router();
-const upload = multer({
-  dest: 'uploads/',
-  limits: {
-    fileSize: 100 * 1024 * 1024,
-  }
-});
+const upload = createUpload();
+
+/** Maximum number of annotations accepted for the edit-pdf tool (DoS guard). */
+const MAX_ANNOTATIONS = 1000;
 
 // Stricter limit for resource-intensive job creation (file processing).
 const createJobLimiter = rateLimit({
@@ -34,14 +33,36 @@ const createJobLimiter = rateLimit({
  * @param {string} options - JSON string of tool-specific options
  * @returns {Object} { jobId: string } - The ID of the created job
  */
-router.post("/", createJobLimiter, upload.array('files', 20), async (req, res) => {
+router.post("/", createJobLimiter, runUpload(upload.array('files', 20)), async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
     const { toolId, options } = req.body;
 
+    // Validate the tool up-front, before any DB row or filesystem work, so an
+    // arbitrary/unknown toolId can never be persisted or reach path building.
+    if (!toolId || !VALID_TOOL_IDS.has(toolId)) {
+      if (files) {
+        await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => {})));
+      }
+      return res.status(400).json({ error: "Unknown or unsupported tool." });
+    }
+
     const noFileTools = ["create-document", "html-to-pdf", "create-word", "create-excel", "create-powerpoint"];
     if ((!files || files.length === 0) && !noFileTools.includes(toolId)) {
       return res.status(400).json({ error: "No files uploaded" });
+    }
+
+    // Authoritative content check: verify real file signatures (magic bytes),
+    // not just the spoofable Content-Type, before anything is processed. Tools
+    // that don't consume uploads (they read from `options`) are exempt — the
+    // client may still attach a source file (e.g. html-to-pdf), which is
+    // ignored during processing and cleaned up with the job.
+    if (!noFileTools.includes(toolId)) {
+      try {
+        await validateUploadedFiles(files);
+      } catch (validationError: any) {
+        return res.status(400).json({ error: validationError.message });
+      }
     }
 
     const inputFiles = files ? files.map(f => ({
@@ -51,7 +72,17 @@ router.post("/", createJobLimiter, upload.array('files', 20), async (req, res) =
       mimetype: f.mimetype,
     })) : [];
 
-    const parsedOptions = options ? JSON.parse(options) : {};
+    let parsedOptions: any;
+    try {
+      parsedOptions = options ? JSON.parse(options) : {};
+    } catch (parseError: any) {
+      // Malformed options: clean up the just-uploaded files instead of leaving
+      // them orphaned on disk, then reject.
+      if (files) {
+        await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => {})));
+      }
+      return res.status(400).json({ error: "Invalid options payload." });
+    }
 
     // Persist a redacted copy so secrets (e.g. passwords) never land in the DB
     // or the job-status API response. Processing below uses the real in-memory
@@ -79,7 +110,7 @@ router.post("/", createJobLimiter, upload.array('files', 20), async (req, res) =
     res.json({ jobId: job.id });
   } catch (error: any) {
     console.error("Error creating job:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: sanitizeErrorMessage(error.message) });
   }
 });
 
@@ -95,9 +126,9 @@ router.get("/:jobId", async (req, res) => {
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
-    res.json(job);
+    res.json(sanitizeJobForClient(job));
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: sanitizeErrorMessage(error.message) });
   }
 });
 
@@ -145,7 +176,7 @@ router.get("/:jobId/download", async (req, res) => {
       }
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: sanitizeErrorMessage(error.message) });
   }
 });
 
@@ -172,7 +203,7 @@ router.delete("/:jobId", async (req, res) => {
     await storage.deleteJob(req.params.jobId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: sanitizeErrorMessage(error.message) });
   }
 });
 
@@ -351,7 +382,7 @@ async function processJobAsync(
         break;
 
       case "edit-pdf":
-        await pdfService.editPDF(inputFiles[0].path, outputPath, options.annotations || []);
+        await pdfService.editPDF(inputFiles[0].path, outputPath, (options.annotations || []).slice(0, MAX_ANNOTATIONS));
         break;
 
       case "sign-pdf":
@@ -496,7 +527,7 @@ async function processJobAsync(
     const duration = (Date.now() - startTime) / 1000;
     logger.error(`Job ${jobId} failed after ${duration.toFixed(2)}s:`, error);
     logJobFailed(jobId, toolId, error.message, error.stack);
-    await storage.updateJobError(jobId, error.message);
+    await storage.updateJobError(jobId, sanitizeErrorMessage(error.message));
     
     for (const file of inputFiles) {
       await fs.unlink(file.path).catch(() => {});
@@ -540,46 +571,50 @@ function parseRanges(rangeStr: string): { start: number; end: number }[] {
  * @param toolId - The ID of the processing tool
  * @returns The file extension including the dot (e.g., ".pdf")
  */
+const TOOL_OUTPUT_EXTENSIONS: Record<string, string> = {
+  "merge-pdf": ".pdf",
+  "split-pdf": ".zip",
+  "remove-pages": ".pdf",
+  "extract-pages": ".pdf",
+  "organize-pdf": ".pdf",
+  "compress-pdf": ".pdf",
+  "jpg-to-pdf": ".pdf",
+  "scan-pdf": ".pdf",
+  "pdf-to-jpg": ".zip",
+  "extract-images": ".zip",
+  "word-to-pdf": ".pdf",
+  "powerpoint-to-pdf": ".pdf",
+  "excel-to-pdf": ".pdf",
+  "html-to-pdf": ".pdf",
+  "create-document": ".pdf",
+  "create-word": ".docx",
+  "create-excel": ".xlsx",
+  "create-powerpoint": ".pptx",
+  "pdf-to-word": ".docx",
+  "pdf-to-powerpoint": ".pptx",
+  "pdf-to-excel": ".xlsx",
+  "protect-pdf": ".pdf",
+  "unlock-pdf": ".pdf",
+  "compress-image": ".jpg",
+  "resize-image": ".jpg",
+  "crop-image": ".jpg",
+  "rotate-image": ".jpg",
+  "rotate-pdf": ".pdf",
+  "add-page-numbers": ".pdf",
+  "add-watermark": ".pdf",
+  "edit-pdf": ".pdf",
+  "sign-pdf": ".pdf",
+  "repair-pdf": ".pdf",
+  "pdf-to-pdfa": ".pdf",
+  "pdf-to-text": ".txt",
+  "convert-image": ".jpg",
+};
+
+/** Allowlist of tool IDs the server knows how to process. */
+const VALID_TOOL_IDS = new Set<string>(Object.keys(TOOL_OUTPUT_EXTENSIONS));
+
 function getOutputExtension(toolId: string): string {
-  const extensionMap: Record<string, string> = {
-    "merge-pdf": ".pdf",
-    "split-pdf": ".zip",
-    "remove-pages": ".pdf",
-    "extract-pages": ".pdf",
-    "organize-pdf": ".pdf",
-    "compress-pdf": ".pdf",
-    "jpg-to-pdf": ".pdf",
-    "scan-pdf": ".pdf",
-    "pdf-to-jpg": ".zip",
-    "extract-images": ".zip",
-    "word-to-pdf": ".pdf",
-    "powerpoint-to-pdf": ".pdf",
-    "excel-to-pdf": ".pdf",
-    "html-to-pdf": ".pdf",
-    "create-document": ".pdf",
-    "create-word": ".docx",
-    "create-excel": ".xlsx",
-    "create-powerpoint": ".pptx",
-    "pdf-to-word": ".docx",
-    "pdf-to-powerpoint": ".pptx",
-    "pdf-to-excel": ".xlsx",
-    "protect-pdf": ".pdf",
-    "unlock-pdf": ".pdf",
-    "compress-image": ".jpg",
-    "resize-image": ".jpg",
-    "crop-image": ".jpg",
-    "rotate-image": ".jpg",
-    "rotate-pdf": ".pdf",
-    "add-page-numbers": ".pdf",
-    "add-watermark": ".pdf",
-    "edit-pdf": ".pdf",
-    "sign-pdf": ".pdf",
-    "repair-pdf": ".pdf",
-    "pdf-to-pdfa": ".pdf",
-    "pdf-to-text": ".txt",
-    "convert-image": ".jpg",
-  };
-  return extensionMap[toolId] || ".pdf";
+  return TOOL_OUTPUT_EXTENSIONS[toolId] || ".pdf";
 }
 
 export default router;

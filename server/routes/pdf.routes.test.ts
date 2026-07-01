@@ -9,10 +9,14 @@ const mocks = vi.hoisted(() => ({
     getPDFPreview: vi.fn(async () => ({ pageCount: 2, width: 612, height: 792 })),
   },
   unlink: vi.fn(async () => {}),
+  open: vi.fn(async () => ({
+    read: vi.fn(async (buf: Buffer) => { Buffer.from("%PDF-1.4").copy(buf); return { bytesRead: 8 }; }),
+    close: vi.fn(async () => {}),
+  })),
 }));
 
 vi.mock("../services/pdf.service", () => ({ pdfService: mocks.pdfService }));
-vi.mock("fs/promises", () => ({ default: { unlink: mocks.unlink }, unlink: mocks.unlink }));
+vi.mock("fs/promises", () => ({ default: { unlink: mocks.unlink, open: mocks.open }, unlink: mocks.unlink, open: mocks.open }));
 
 function appWith(router: any) {
   const app = express();

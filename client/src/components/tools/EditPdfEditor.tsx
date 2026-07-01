@@ -326,7 +326,7 @@ export function EditPdfEditor({ files, onOptionsChange }: EditPdfEditorProps) {
       }
     }
 
-    if (selectedTool !== "select" && selectedTool !== "text" && selectedTool !== "snip") {
+    if (selectedTool !== "select" && selectedTool !== "text") {
       setIsDrawing(true);
       setDrawStart(pos);
       

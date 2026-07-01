@@ -32,6 +32,15 @@ describe("feedback routes", () => {
     expect(mocks.storage.createFeedback).toHaveBeenCalledWith(expect.objectContaining({ feedback: "Nice", email: "a@example.com", userAgent: expect.stringContaining("vitest") }));
   });
 
+  it("rejects feedback and email that exceed length limits", async () => {
+    const app = appWith(router);
+    const longFeedback = await request(app).post("/feedback").send({ feedback: "a".repeat(5001) });
+    expect(longFeedback.status).toBe(400);
+    const longEmail = await request(app).post("/feedback").send({ feedback: "hi", email: "a".repeat(255) });
+    expect(longEmail.status).toBe(400);
+    expect(mocks.storage.createFeedback).not.toHaveBeenCalled();
+  });
+
   it("lists feedback and handles storage failures", async () => {
     const app = appWith(router);
     expect((await request(app).get("/feedback")).body).toEqual({ feedbacks: [{ id: "fb-1", feedback: "Nice" }], count: 1 });

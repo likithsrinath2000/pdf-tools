@@ -55,10 +55,10 @@ function makeOffice() {
 }
 
 function execSucceeds() {
-  mocks.execFile.mockImplementation((_cmd: string, _args: string[], cb: any) => cb(null, { stdout: '', stderr: '' }));
+  mocks.execFile.mockImplementation((...args: any[]) => args[args.length - 1](null, { stdout: '', stderr: '' }));
 }
 function execFails(error = new Error('exec failed')) {
-  mocks.execFile.mockImplementation((_cmd: string, _args: string[], cb: any) => cb(error));
+  mocks.execFile.mockImplementation((...args: any[]) => args[args.length - 1](error));
 }
 
 describe('OfficeService', () => {
@@ -92,7 +92,7 @@ describe('OfficeService', () => {
     mocks.fs.readdir.mockResolvedValueOnce(['report.pdf']);
     await service.convertToPDF('/in/report.docx', '/out/report.pdf');
     expect(mocks.fs.mkdir).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/lo_/), { recursive: true });
-    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', expect.stringMatching(/^-env:UserInstallation=file:\/\//), '--convert-to', 'pdf', '--outdir', expect.stringMatching(/^\/out\/lo_/), '/in/report.docx'], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', expect.stringMatching(/^-env:UserInstallation=file:\/\//), '--convert-to', 'pdf', '--outdir', expect.stringMatching(/^\/out\/lo_/), '/in/report.docx'], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
     expect(mocks.fs.rename).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/lo_[^/]+\/report\.pdf$/), '/out/report.pdf');
     expect(mocks.fs.rm).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/lo_/), { recursive: true, force: true });
 
@@ -106,7 +106,7 @@ describe('OfficeService', () => {
     await service.pdfToWord('/in/a.pdf', '/out/a.docx');
 
     expect(mocks.fs.writeFile).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/pdf2word_[^/]+\.html$/), expect.stringContaining('Content from PDF page 1'));
-    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', expect.stringMatching(/^-env:UserInstallation=file:\/\//), '--convert-to', 'docx:MS Word 2007 XML', '--outdir', expect.stringMatching(/^\/out\/lo_/), expect.stringMatching(/^\/out\/pdf2word_[^/]+\.html$/)], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', expect.stringMatching(/^-env:UserInstallation=file:\/\//), '--convert-to', 'docx:MS Word 2007 XML', '--outdir', expect.stringMatching(/^\/out\/lo_/), expect.stringMatching(/^\/out\/pdf2word_[^/]+\.html$/)], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
     expect(mocks.fs.unlink).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/pdf2word_[^/]+\.html$/));
 
     // No docx produced -> throws.
@@ -119,7 +119,7 @@ describe('OfficeService', () => {
     await service.pdfToExcel('/in/a.pdf', '/out/a.xlsx');
 
     expect(mocks.fs.writeFile).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/pdf2excel_[^/]+\.csv$/), expect.stringContaining('Page,Content,Note'));
-    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', expect.stringMatching(/^-env:UserInstallation=file:\/\//), '--convert-to', 'xlsx', '--outdir', expect.stringMatching(/^\/out\/lo_/), expect.stringMatching(/^\/out\/pdf2excel_[^/]+\.csv$/)], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', expect.stringMatching(/^-env:UserInstallation=file:\/\//), '--convert-to', 'xlsx', '--outdir', expect.stringMatching(/^\/out\/lo_/), expect.stringMatching(/^\/out\/pdf2excel_[^/]+\.csv$/)], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
     expect(mocks.fs.rename).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/lo_[^/]+\/a\.xlsx$/), '/out/a.xlsx');
     expect(mocks.fs.unlink).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/pdf2excel_[^/]+\.csv$/));
 
@@ -131,7 +131,7 @@ describe('OfficeService', () => {
   it('converts PDF to PowerPoint through extracted PNGs, no-pages, and missing output', async () => {
     mocks.fs.readdir.mockResolvedValueOnce(['page-2.png', 'page-1.png']).mockResolvedValueOnce(['out.pptx']);
     await service.pdfToPowerPoint('/in/a.pdf', '/out/a.pptx');
-    expect(execFile).toHaveBeenCalledWith('pdftoppm', ['-png', '-r', '150', '/in/a.pdf', expect.stringMatching(/^\/out\/pptx_[^/]+\/page$/)], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('pdftoppm', ['-png', '-r', '150', '/in/a.pdf', expect.stringMatching(/^\/out\/pptx_[^/]+\/page$/)], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
     expect(mocks.fs.rename).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/lo_[^/]+\/out\.pptx$/), '/out/a.pptx');
     expect(mocks.fs.rm).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/pptx_/), { recursive: true, force: true });
 
