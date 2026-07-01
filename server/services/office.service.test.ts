@@ -107,7 +107,7 @@ describe('OfficeService', () => {
     await service.pdfToWord('/in/a.pdf', '/out/a.docx');
 
     expect(mocks.fs.writeFile).toHaveBeenCalledWith('/out/a.html', expect.stringContaining('Content from PDF page 1'));
-    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', '--convert-to', 'docx', '--outdir', '/out', '/out/a.html'], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('libreoffice', ['--headless', '--convert-to', 'docx:MS Word 2007 XML', '--outdir', '/out', '/out/a.html'], expect.any(Function));
     expect(mocks.fs.unlink).toHaveBeenCalledWith('/out/a.html');
 
     mocks.fs.readdir.mockResolvedValueOnce([]);

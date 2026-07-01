@@ -65,7 +65,12 @@ export class OfficeService {
       await fs.writeFile(htmlPath, docContent);
       
       await execFileAsync('libreoffice', [
-        '--headless', '--convert-to', 'docx', '--outdir', outputDir, htmlPath,
+        '--headless',
+        // Explicit export filter: HTML input opens in Writer/Web mode, which has
+        // no direct docx export filter ("no export filter" error) unless named.
+        '--convert-to', 'docx:MS Word 2007 XML',
+        '--outdir', outputDir,
+        htmlPath,
       ]);
       
       const files = await fs.readdir(outputDir);
@@ -164,7 +169,12 @@ export class OfficeService {
       await fs.writeFile(htmlPath, htmlContent);
       
       await execFileAsync('libreoffice', [
-        '--headless', '--convert-to', 'pptx', '--outdir', outputDir, htmlPath,
+        '--headless',
+        // Explicit export filter: HTML input opens in Impress web mode, which has
+        // no direct pptx export filter unless the filter is named explicitly.
+        '--convert-to', 'pptx:Impress MS PowerPoint 2007 XML',
+        '--outdir', outputDir,
+        htmlPath,
       ]);
       
       const outputFiles = await fs.readdir(outputDir);
