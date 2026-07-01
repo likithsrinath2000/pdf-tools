@@ -441,7 +441,7 @@ pdftools/
 | `FILE_MAX_AGE_HOURS` | Hours before file deletion | 24 |
 | `CLEANUP_INTERVAL_MINUTES` | Cleanup check interval | 60 |
 | `LOG_LEVEL` | Logging verbosity | info |
-| `RATE_LIMIT_MAX` | Max API requests per IP per 15 min | 1000 |
+| `RATE_LIMIT_MAX` | Max API requests per IP per 15 min | 3000 |
 | `JOB_RATE_LIMIT_MAX` | Max processing jobs per IP per 15 min | 60 |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist (empty = allow all) | (all) |
 
