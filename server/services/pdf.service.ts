@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import fs from 'fs/promises';
 import { promisify } from 'util';
 import { execFile } from 'child_process';
+import { randomUUID } from 'crypto';
 import path from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -43,13 +44,18 @@ export class PDFService {
     const pdf = await PDFDocument.load(pdfBytes);
     const outputPaths: string[] = [];
 
+    // Write into a unique per-job subdir so concurrent split jobs don't clobber
+    // each other's fixed-named split_N.pdf files (which would swap their pages).
+    const jobDir = path.join(outputDir, `split_${randomUUID()}`);
+    await fs.mkdir(jobDir, { recursive: true });
+
     for (let i = 0; i < ranges.length; i++) {
       const { start, end } = ranges[i];
       const newPdf = await PDFDocument.create();
       const pages = await newPdf.copyPages(pdf, Array.from({ length: end - start + 1 }, (_, idx) => start + idx - 1));
       pages.forEach((page) => newPdf.addPage(page));
       
-      const outputPath = path.join(outputDir, `split_${i + 1}.pdf`);
+      const outputPath = path.join(jobDir, `split_${i + 1}.pdf`);
       const newPdfBytes = await newPdf.save();
       await fs.writeFile(outputPath, newPdfBytes);
       outputPaths.push(outputPath);
@@ -170,18 +176,23 @@ export class PDFService {
 
   async pdfToImages(inputPath: string, outputDir: string, format: 'jpg' | 'png' = 'jpg'): Promise<string[]> {
     try {
-      await fs.mkdir(outputDir, { recursive: true });
+      // Render into a unique per-job subdirectory so we never pick up leftover
+      // page images from other conversions in the shared output directory
+      // (which would leak other users' pages and return the wrong count).
+      const jobDir = path.join(outputDir, `pdf2img_${randomUUID()}`);
+      await fs.mkdir(jobDir, { recursive: true });
       
       const formatFlag = format === 'jpg' ? '-jpeg' : '-png';
-      const prefix = path.join(outputDir, 'page');
+      const prefix = path.join(jobDir, 'page');
       
       await execFileAsync('pdftoppm', [formatFlag, inputPath, prefix]);
       
-      const files = await fs.readdir(outputDir);
-      const extension = format === 'jpg' ? '.jpg' : '.png';
+      const files = await fs.readdir(jobDir);
       return files
         .filter(f => f.startsWith('page') && (f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.ppm')))
-        .map(f => path.join(outputDir, f));
+        // Order by the numeric page index (page-2 before page-10).
+        .sort((a, b) => (parseInt(a.match(/(\d+)/)?.[1] || '0', 10)) - (parseInt(b.match(/(\d+)/)?.[1] || '0', 10)))
+        .map(f => path.join(jobDir, f));
     } catch (error) {
       throw new Error(`Failed to convert PDF to images: ${error}`);
     }
@@ -755,14 +766,18 @@ export class PDFService {
 
   async extractImages(inputPath: string, outputDir: string): Promise<string[]> {
     try {
+      // Extract into a unique per-job subdirectory so we never pick up leftover
+      // images from other jobs in the shared output directory.
+      const jobDir = path.join(outputDir, `pdfimg_${randomUUID()}`);
+      await fs.mkdir(jobDir, { recursive: true });
       // Use pdfimages from poppler-utils to extract embedded images
-      const prefix = path.join(outputDir, 'image');
+      const prefix = path.join(jobDir, 'image');
       await execFileAsync('pdfimages', ['-all', inputPath, prefix]);
       
-      const files = await fs.readdir(outputDir);
+      const files = await fs.readdir(jobDir);
       const imageFiles = files
         .filter(f => f.startsWith('image') && (f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.ppm') || f.endsWith('.pbm') || f.endsWith('.tif') || f.endsWith('.tiff')))
-        .map(f => path.join(outputDir, f));
+        .map(f => path.join(jobDir, f));
       
       // Convert any PPM/PBM files to PNG using sharp
       const convertedFiles: string[] = [];

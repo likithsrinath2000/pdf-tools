@@ -118,7 +118,32 @@ router.get("/:jobId/download", async (req, res) => {
       return res.status(400).json({ error: "Job not completed or no output file" });
     }
 
-    res.download(job.outputFile, path.basename(job.outputFile));
+    const outputFile = job.outputFile;
+    const inputFiles = (job.inputFiles as any[]) || [];
+
+    // Stream the file, then purge it from the server so a processed document is
+    // never retained after the user has received it. Client-side tools never
+    // upload their result and can still be re-downloaded from the browser.
+    // On a failed/interrupted transfer we keep the file so the user can retry;
+    // the periodic cleanup remains a safety net for abandoned downloads.
+    res.download(outputFile, path.basename(outputFile), async (err) => {
+      if (err) {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to download file" });
+        }
+        return;
+      }
+      try {
+        await fs.unlink(outputFile).catch(() => {});
+        for (const file of inputFiles) {
+          await fs.unlink(file.path).catch(() => {});
+        }
+        await storage.deleteJob(req.params.jobId);
+        logFileOperation('cleanup', outputFile, true, 'deleted after download');
+      } catch (cleanupErr: any) {
+        logger.error('Post-download cleanup failed:', { jobId: req.params.jobId, error: cleanupErr.message });
+      }
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

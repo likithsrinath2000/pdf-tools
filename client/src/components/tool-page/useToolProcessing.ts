@@ -45,6 +45,7 @@ export interface UseToolProcessingResult {
   checkingEncryption: boolean;
   processedClientSide: boolean;
   clientResult: ProcessingResult | null;
+  serverDownloaded: boolean;
   processingPrediction: ProcessingModePrediction | null;
   handleFilesSelected: (selectedFiles: File[], toolId: string, maxFiles?: number) => Promise<void>;
   removeFile: (index: number) => void;
@@ -75,6 +76,9 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
   // Client-side processing state
   const [processedClientSide, setProcessedClientSide] = useState(false);
   const [clientResult, setClientResult] = useState<ProcessingResult | null>(null);
+  // True once a server-side result has been downloaded. The server deletes the
+  // file immediately after download, so it can't be fetched again.
+  const [serverDownloaded, setServerDownloaded] = useState(false);
   // Processing mode prediction (shown before user clicks process)
   const [processingPrediction, setProcessingPrediction] = useState<ProcessingModePrediction | null>(null);
 
@@ -90,6 +94,7 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     setCheckingEncryption(false);
     setProcessedClientSide(false);
     setClientResult(null);
+    setServerDownloaded(false);
     setProcessingPrediction(null);
   }, [toolId]);
 
@@ -272,11 +277,13 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
         return;
       }
       
-      // Server-side result - download from server
+      // Server-side result - download from server. The server purges the file
+      // right after a successful download, so mark it as no longer available.
       if (!currentJob) return;
       
       const filename = `${currentToolId}_${Date.now()}.${currentJob.outputFile?.split('.').pop()}`;
       await apiClient.downloadJob(currentJob.id, filename);
+      setServerDownloaded(true);
     } catch (err: any) {
       setError(err.message || "Failed to download file");
     }
@@ -294,6 +301,7 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     setProcessingOptions({});
     setProcessedClientSide(false);
     setClientResult(null);
+    setServerDownloaded(false);
     setProcessingPrediction(null);
   }, []);
 
@@ -334,6 +342,7 @@ export function useToolProcessing(toolId: string | undefined): UseToolProcessing
     checkingEncryption,
     processedClientSide,
     clientResult,
+    serverDownloaded,
     processingPrediction,
     handleFilesSelected,
     removeFile,
