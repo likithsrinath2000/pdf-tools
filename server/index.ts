@@ -8,6 +8,7 @@ import { storage } from "./storage";
 import compression from "compression";
 import helmet from "helmet";
 import { rateLimit, cors } from "./middleware/security";
+import { nonNegativeIntEnv } from "./utils/env";
 
 const app = express();
 const httpServer = createServer(app);
@@ -88,7 +89,7 @@ if (process.env.NODE_ENV === "production") {
 // Express, trusting 1 hop, reads the right-most (proxy-added) entry — so a
 // client-spoofed X-Forwarded-For cannot move the rate-limit key. Set
 // TRUST_PROXY_HOPS to match the real number of proxies in front of the app.
-app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS || "1", 10));
+app.set('trust proxy', nonNegativeIntEnv(process.env.TRUST_PROXY_HOPS, 1));
 
 // Global API rate limit (per IP). Set high enough that a long-running job
 // polled every second (~900 requests / 15 min) plus normal browsing/download

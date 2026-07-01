@@ -1,7 +1,11 @@
 import multer from "multer";
 import fs from "fs/promises";
+import path from "path";
 import type { FileHandle } from "fs/promises";
 import type { Request, RequestHandler } from "express";
+
+/** Directory multer writes uploads to. Also used to confine path access. */
+export const UPLOAD_DEST = "uploads/";
 
 /**
  * Client-declared MIME types we accept at the multer gate. This is only a cheap
@@ -23,6 +27,10 @@ const ALLOWED_MIME_TYPES = new Set<string>([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  // Text/HTML uploads for the html-to-pdf tool (which reads options, not the
+  // file); file-consuming tools still reject these at the magic-byte stage.
+  "text/html",
+  "text/plain",
   // Browsers frequently fall back to this generic type; the magic-byte check
   // below is the authoritative gate for these.
   "application/octet-stream",
@@ -46,10 +54,19 @@ function fileFilter(
  */
 export function createUpload(): multer.Multer {
   return multer({
-    dest: "uploads/",
+    dest: UPLOAD_DEST,
     limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter,
   });
+}
+
+/**
+ * Confines an uploaded file's path to the upload directory. multer generates the
+ * on-disk name, but deriving a fresh path from a constant base + the basename
+ * guarantees no directory-traversal component can reach a filesystem sink.
+ */
+function confineToUploadDir(filePath: string): string {
+  return path.join(UPLOAD_DEST, path.basename(filePath));
 }
 
 /**
@@ -139,9 +156,9 @@ export async function validateUploadedFiles(
   if (!files || files.length === 0) return;
 
   for (const file of files) {
-    const ok = await hasAllowedSignature(file.path);
+    const ok = await hasAllowedSignature(confineToUploadDir(file.path));
     if (!ok) {
-      await Promise.all(files.map((f) => fs.unlink(f.path).catch(() => {})));
+      await Promise.all(files.map((f) => fs.unlink(confineToUploadDir(f.path)).catch(() => {})));
       throw new Error(
         `File "${file.originalname}" is not an accepted document or image type.`
       );

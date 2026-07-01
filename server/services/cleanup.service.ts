@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { logger, logCleanup } from '../logger';
+import { positiveIntEnv } from '../utils/env';
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
 // Processed results live here. This MUST be cleaned too — otherwise output
@@ -11,21 +12,23 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR || path.join(process.cwd(), 'output_fi
 /**
  * Effective retention. Defaults to 5 minutes. `FILE_MAX_AGE_MINUTES` takes
  * precedence; the legacy `FILE_MAX_AGE_HOURS` is still honored when minutes is
- * not set.
+ * not set. Invalid/non-positive values fall back to the default so a
+ * misconfiguration can never produce a NaN cutoff.
  */
 function resolveMaxAgeMs(): number {
+  const DEFAULT_MS = 5 * 60 * 1000;
   if (process.env.FILE_MAX_AGE_MINUTES) {
-    return parseInt(process.env.FILE_MAX_AGE_MINUTES, 10) * 60 * 1000;
+    return positiveIntEnv(process.env.FILE_MAX_AGE_MINUTES, 5) * 60 * 1000;
   }
   if (process.env.FILE_MAX_AGE_HOURS) {
-    return parseInt(process.env.FILE_MAX_AGE_HOURS, 10) * 60 * 60 * 1000;
+    return positiveIntEnv(process.env.FILE_MAX_AGE_HOURS, 1) * 60 * 60 * 1000;
   }
-  return 5 * 60 * 1000;
+  return DEFAULT_MS;
 }
 
 const FILE_MAX_AGE_MS = resolveMaxAgeMs();
 // Sweep frequently so files don't linger much past their retention window.
-const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '1', 10) * 60 * 1000;
+const CLEANUP_INTERVAL_MS = positiveIntEnv(process.env.CLEANUP_INTERVAL_MINUTES, 1) * 60 * 1000;
 
 export class CleanupService {
   private intervalId: NodeJS.Timeout | null = null;

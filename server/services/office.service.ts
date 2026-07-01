@@ -7,6 +7,7 @@ import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import officegen from 'officegen';
 import { createWriteStream } from 'fs';
+import { positiveIntEnv } from '../utils/env';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,7 +16,7 @@ const execFileAsync = promisify(execFile);
  * documents must never be able to pin a worker indefinitely. Override with
  * CLI_TIMEOUT_MS.
  */
-const EXEC_TIMEOUT_MS = parseInt(process.env.CLI_TIMEOUT_MS || "120000", 10);
+const EXEC_TIMEOUT_MS = positiveIntEnv(process.env.CLI_TIMEOUT_MS, 120000);
 
 /**
  * Upper bound on HTML/text input processed on the main thread (html-to-pdf,
@@ -176,7 +177,7 @@ export class OfficeService {
 
   async htmlToPDF(htmlContent: string, outputPath: string): Promise<void> {
     if (typeof htmlContent === 'string' && htmlContent.length > MAX_HTML_CHARS) {
-      throw new Error(`Content is too large. Please keep it under ${Math.floor(MAX_HTML_CHARS / 1000)}KB.`);
+      throw new Error(`Content is too large. Please keep it under ${MAX_HTML_CHARS.toLocaleString('en-US')} characters.`);
     }
 
     const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');

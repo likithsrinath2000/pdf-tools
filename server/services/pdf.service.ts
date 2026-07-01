@@ -1,10 +1,11 @@
-import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
-import sharp from 'sharp';
-import fs from 'fs/promises';
 import { promisify } from 'util';
 import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 import path from 'path';
+import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
+import sharp from 'sharp';
+import fs from 'fs/promises';
+import { positiveIntEnv } from '../utils/env';
 
 const execFileAsync = promisify(execFile);
 
@@ -13,7 +14,7 @@ const execFileAsync = promisify(execFile);
  * process untrusted user files, so a runaway/maliciously-crafted document must
  * never be able to pin a worker forever. Override with CLI_TIMEOUT_MS.
  */
-const EXEC_TIMEOUT_MS = parseInt(process.env.CLI_TIMEOUT_MS || "120000", 10);
+const EXEC_TIMEOUT_MS = positiveIntEnv(process.env.CLI_TIMEOUT_MS, 120000);
 
 export class PDFService {
   async mergePDFs(inputPaths: string[], outputPath: string, pageOrder?: { fileIndex: number; pageNumber: number }[]): Promise<void> {
@@ -257,7 +258,7 @@ export class PDFService {
       }
       const pdfBytes = await fs.readFile(inputPath);
       try {
-        const pdf = await PDFDocument.load(pdfBytes, { password });
+        const pdf = await PDFDocument.load(pdfBytes, { password } as any);
         const unlockedPdfBytes = await pdf.save();
         await fs.writeFile(outputPath, unlockedPdfBytes);
       } catch (innerError: any) {
@@ -701,10 +702,17 @@ export class PDFService {
         if (!options.signatureImage.startsWith(prefix)) {
           throw new Error('Invalid signature image. A PNG data URL is required.');
         }
+
+        const MAX_SIGNATURE_BYTES = 5 * 1024 * 1024;
+        // Bound the encoded string up-front (base64 is ~4/3 the byte size) so a
+        // huge data URL can't force an oversized allocation before we check.
+        if (options.signatureImage.length > prefix.length + Math.ceil(MAX_SIGNATURE_BYTES / 3) * 4) {
+          throw new Error('Signature image exceeds the 5MB limit.');
+        }
+
         const base64Data = options.signatureImage.slice(prefix.length);
         const rawBytes = Buffer.from(base64Data, 'base64');
 
-        const MAX_SIGNATURE_BYTES = 5 * 1024 * 1024;
         if (rawBytes.length === 0 || rawBytes.length > MAX_SIGNATURE_BYTES) {
           throw new Error('Signature image is missing or exceeds the 5MB limit.');
         }

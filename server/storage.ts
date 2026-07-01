@@ -1,6 +1,6 @@
 import { processingJobs, feedbacks, type ProcessingJob, type InsertProcessingJob, type Feedback, type InsertFeedback } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, lt } from "drizzle-orm";
+import { eq, desc, lt, and, ne } from "drizzle-orm";
 
 export interface IStorage {
   createJob(job: InsertProcessingJob): Promise<ProcessingJob>;
@@ -75,14 +75,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Removes job rows created before `cutoff` so the table doesn't grow forever
-   * with stale records once their files have been cleaned up. Returns the
-   * number of rows deleted.
+   * Removes finished job rows created before `cutoff` so the table doesn't grow
+   * forever with stale records once their files have been cleaned up. In-progress
+   * ("processing") jobs are never deleted, so an active job can't vanish from the
+   * status API mid-run. Returns the number of rows deleted.
    */
   async deleteJobsOlderThan(cutoff: Date): Promise<number> {
     const deleted = await db
       .delete(processingJobs)
-      .where(lt(processingJobs.createdAt, cutoff))
+      .where(and(lt(processingJobs.createdAt, cutoff), ne(processingJobs.status, "processing")))
       .returning({ id: processingJobs.id });
     return deleted.length;
   }
