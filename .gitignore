@@ -28,3 +28,6 @@ feedback/*.json
 
 # Cache
 .cache/
+
+# Test coverage output
+coverage/

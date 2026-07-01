@@ -3,12 +3,13 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { storage } from "../storage";
-import { logger, logJobCreated, logJobCompleted, logJobFailed, logToolExecution, logJobProgress, logFileOperation } from "../logger";
+import { logger, logJobCreated, logJobCompleted, logJobFailed, logToolExecution, logJobProgress, logFileOperation, redactOptions } from "../logger";
 import { jobsProcessed, activeJobs, fileSizeProcessed } from "../metrics";
 import { randomUUID } from "crypto";
 import { pdfService } from "../services/pdf.service";
 import { imageService } from "../services/image.service";
 import { officeService } from "../services/office.service";
+import { rateLimit } from "../middleware/security";
 
 const router = Router();
 const upload = multer({
@@ -16,6 +17,13 @@ const upload = multer({
   limits: {
     fileSize: 100 * 1024 * 1024,
   }
+});
+
+// Stricter limit for resource-intensive job creation (file processing).
+const createJobLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.JOB_RATE_LIMIT_MAX || "60", 10),
+  message: "Too many processing requests, please slow down and try again shortly.",
 });
 
 /**
@@ -26,7 +34,7 @@ const upload = multer({
  * @param {string} options - JSON string of tool-specific options
  * @returns {Object} { jobId: string } - The ID of the created job
  */
-router.post("/", upload.array('files', 20), async (req, res) => {
+router.post("/", createJobLimiter, upload.array('files', 20), async (req, res) => {
   try {
     const files = req.files as Express.Multer.File[];
     const { toolId, options } = req.body;
@@ -45,12 +53,15 @@ router.post("/", upload.array('files', 20), async (req, res) => {
 
     const parsedOptions = options ? JSON.parse(options) : {};
 
+    // Persist a redacted copy so secrets (e.g. passwords) never land in the DB
+    // or the job-status API response. Processing below uses the real in-memory
+    // parsedOptions, so functionality is unaffected.
     const job = await storage.createJob({
       toolId,
       status: "processing",
       progress: 0,
       inputFiles: inputFiles as any,
-      options: parsedOptions as any,
+      options: redactOptions(parsedOptions) as any,
     });
 
     logJobCreated(job.id, toolId, files?.length || 0, parsedOptions);
@@ -59,7 +70,7 @@ router.post("/", upload.array('files', 20), async (req, res) => {
     const totalSize = files?.reduce((sum, f) => sum + f.size, 0) || 0;
     fileSizeProcessed.observe({ tool_id: toolId }, totalSize);
     
-    logger.debug(`Job ${job.id} queued with options: ${JSON.stringify(parsedOptions)}`);
+    logger.debug(`Job ${job.id} queued with options: ${JSON.stringify(redactOptions(parsedOptions))}`);
 
     processJobAsync(job.id, toolId, inputFiles, parsedOptions).catch(err => {
       logger.error(`Unhandled error in job ${job.id}:`, err);
@@ -267,7 +278,10 @@ async function processJobAsync(
         break;
 
       case "protect-pdf":
-        await pdfService.protectPDF(inputFiles[0].path, outputPath, options.password || 'password123');
+        if (!options.password) {
+          throw new Error('A password is required to protect this PDF.');
+        }
+        await pdfService.protectPDF(inputFiles[0].path, outputPath, options.password);
         break;
 
       case "unlock-pdf":
