@@ -1,5 +1,5 @@
 import { promisify } from 'util';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import { PDFDocument } from 'pdf-lib';
@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import officegen from 'officegen';
 import { createWriteStream } from 'fs';
 
-const execPromise = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class OfficeService {
   async convertToPDF(inputPath: string, outputPath: string): Promise<void> {
@@ -15,9 +15,9 @@ export class OfficeService {
     const baseName = path.basename(inputPath);
     
     try {
-      await execPromise(
-        `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${inputPath}"`
-      );
+      await execFileAsync('libreoffice', [
+        '--headless', '--convert-to', 'pdf', '--outdir', outputDir, inputPath,
+      ]);
       
       const files = await fs.readdir(outputDir);
       const pdfFile = files.find(f => f.endsWith('.pdf') && f.includes(baseName.substring(0, 8)));
@@ -42,13 +42,8 @@ export class OfficeService {
 
   async pdfToWord(inputPath: string, outputPath: string): Promise<void> {
     const outputDir = path.dirname(outputPath);
-    const tempOdtPath = path.join(outputDir, `temp_${Date.now()}.odt`);
-    
+
     try {
-      await execPromise(
-        `pdftocairo -pdf "${inputPath}" - | libreoffice --headless --infilter="writer_pdf_import" --convert-to odt --outdir "${outputDir}" "${inputPath}" 2>/dev/null || true`
-      );
-      
       const pdfBytes = await fs.readFile(inputPath);
       const pdf = await PDFDocument.load(pdfBytes);
       const pageCount = pdf.getPageCount();
@@ -69,9 +64,9 @@ export class OfficeService {
       const htmlPath = outputPath.replace('.docx', '.html');
       await fs.writeFile(htmlPath, docContent);
       
-      await execPromise(
-        `libreoffice --headless --convert-to docx --outdir "${outputDir}" "${htmlPath}"`
-      );
+      await execFileAsync('libreoffice', [
+        '--headless', '--convert-to', 'docx', '--outdir', outputDir, htmlPath,
+      ]);
       
       const files = await fs.readdir(outputDir);
       const docxFile = files.find(f => f.endsWith('.docx'));
@@ -110,9 +105,9 @@ export class OfficeService {
       const csvPath = outputPath.replace('.xlsx', '.csv');
       await fs.writeFile(csvPath, csvContent);
       
-      await execPromise(
-        `libreoffice --headless --convert-to xlsx --outdir "${outputDir}" "${csvPath}"`
-      );
+      await execFileAsync('libreoffice', [
+        '--headless', '--convert-to', 'xlsx', '--outdir', outputDir, csvPath,
+      ]);
       
       const files = await fs.readdir(outputDir);
       const xlsxFile = files.find(f => f.endsWith('.xlsx'));
@@ -142,9 +137,7 @@ export class OfficeService {
     try {
       await fs.mkdir(tempDir, { recursive: true });
       
-      await execPromise(
-        `pdftoppm -png -r 150 "${inputPath}" "${tempDir}/page"`
-      );
+      await execFileAsync('pdftoppm', ['-png', '-r', '150', inputPath, `${tempDir}/page`]);
       
       const files = await fs.readdir(tempDir);
       const pngFiles = files.filter(f => f.endsWith('.png')).sort();
@@ -170,9 +163,9 @@ export class OfficeService {
       const htmlPath = path.join(tempDir, 'slides.html');
       await fs.writeFile(htmlPath, htmlContent);
       
-      await execPromise(
-        `libreoffice --headless --convert-to pptx --outdir "${outputDir}" "${htmlPath}"`
-      );
+      await execFileAsync('libreoffice', [
+        '--headless', '--convert-to', 'pptx', '--outdir', outputDir, htmlPath,
+      ]);
       
       const outputFiles = await fs.readdir(outputDir);
       const pptxFile = outputFiles.find(f => f.endsWith('.pptx') && f.includes('slides'));

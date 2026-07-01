@@ -72,12 +72,31 @@ if (process.env.NODE_ENV !== 'production') {
   }));
 }
 
+/**
+ * Returns a shallow copy of an options object with sensitive values masked.
+ * Prevents secrets (e.g. PDF passwords) from leaking into logs, the database,
+ * or API responses. Keys whose name looks password-like are redacted.
+ */
+export function redactOptions<T = any>(options: T): T {
+  if (!options || typeof options !== "object") {
+    return options;
+  }
+  const SENSITIVE = /pass(word|phrase)?|secret|token/i;
+  const clone: any = Array.isArray(options) ? [...(options as any)] : { ...(options as any) };
+  for (const key of Object.keys(clone)) {
+    if (SENSITIVE.test(key) && clone[key] != null && clone[key] !== "") {
+      clone[key] = "[REDACTED]";
+    }
+  }
+  return clone;
+}
+
 export function logJobCreated(jobId: string, toolId: string, fileCount: number, options?: any) {
   logger.info(`Job created: ${toolId}`, { 
     jobId, 
     toolId, 
     fileCount,
-    options: options ? JSON.stringify(options) : 'none'
+    options: options ? JSON.stringify(redactOptions(options)) : 'none'
   });
 }
 
@@ -126,7 +145,7 @@ export function logToolExecution(toolId: string, jobId: string, inputFiles: stri
     jobId,
     toolId,
     inputFiles: inputFiles.map(f => path.basename(f)),
-    options: options ? JSON.stringify(options) : 'default'
+    options: options ? JSON.stringify(redactOptions(options)) : 'default'
   });
 }
 

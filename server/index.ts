@@ -6,6 +6,7 @@ import { logger, logStartup, logRequest } from "./logger";
 import { cleanupService } from "./services/cleanup.service";
 import compression from "compression";
 import helmet from "helmet";
+import { rateLimit, cors } from "./middleware/security";
 
 const app = express();
 const httpServer = createServer(app);
@@ -16,13 +17,62 @@ declare module "http" {
   }
 }
 
+app.use(cors());
+
 if (process.env.NODE_ENV === "production") {
   app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        // Google Translate widget injects scripts from several Google origins.
+        scriptSrc: [
+          "'self'", "'unsafe-inline'", "'unsafe-eval'",
+          "https://translate.google.com",
+          "https://translate.googleapis.com",
+          "https://translate-pa.googleapis.com",
+          "https://*.googleapis.com",
+          "https://*.google.com",
+          "https://www.gstatic.com",
+        ],
+        // Google Fonts stylesheet + Translate widget styles.
+        styleSrc: [
+          "'self'", "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+          "https://www.gstatic.com",
+        ],
+        imgSrc: [
+          "'self'", "data:", "blob:",
+          "https://*.gstatic.com",
+          "https://*.googleapis.com",
+          "https://*.google.com",
+        ],
+        // Google Fonts + Translate widget font/image assets.
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+        connectSrc: [
+          "'self'",
+          "https://translate.googleapis.com",
+          "https://translate-pa.googleapis.com",
+          "https://*.googleapis.com",
+        ],
+        workerSrc: ["'self'", "blob:"],
+        frameSrc: ["'self'", "https://www.google.com"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   }));
   app.use(compression());
 }
+
+// Global API rate limit (per IP). Set high enough that a long-running job
+// polled every second (~900 requests / 15 min) plus normal browsing/download
+// traffic stays well under the cap; the heavy work is throttled separately at
+// job creation. Tune via env if needed.
+app.use("/api", rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX || "3000", 10),
+}));
 
 app.set('trust proxy', 1);
 

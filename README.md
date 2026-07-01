@@ -441,14 +441,21 @@ pdftools/
 | `FILE_MAX_AGE_HOURS` | Hours before file deletion | 24 |
 | `CLEANUP_INTERVAL_MINUTES` | Cleanup check interval | 60 |
 | `LOG_LEVEL` | Logging verbosity | info |
+| `RATE_LIMIT_MAX` | Max API requests per IP per 15 min | 1000 |
+| `JOB_RATE_LIMIT_MAX` | Max processing jobs per IP per 15 min | 60 |
+| `ALLOWED_ORIGINS` | Comma-separated CORS allowlist (empty = allow all) | (all) |
 
 ## Security
 
 - HTTPS enforced (production)
-- Rate limiting per IP
+- Rate limiting per IP (global + stricter limit on job creation)
 - File size limits (100MB default)
-- CORS configuration
-- Security headers (X-Frame-Options, CSP, etc.)
+- CORS configuration (`ALLOWED_ORIGINS`)
+- Security headers via Helmet, including a Content-Security-Policy
+- External tools (Ghostscript, qpdf, LibreOffice, Poppler) are invoked with
+  argument arrays (no shell), preventing command injection
+- Password-protect uses qpdf and fails loudly rather than ever emitting an
+  unencrypted file
 - Files deleted after processing
 - No permanent storage of user data
 - Environment variable secrets

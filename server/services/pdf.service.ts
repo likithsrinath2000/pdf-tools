@@ -2,10 +2,10 @@ import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 import { promisify } from 'util';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
 
-const execPromise = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class PDFService {
   async mergePDFs(inputPaths: string[], outputPath: string, pageOrder?: { fileIndex: number; pageNumber: number }[]): Promise<void> {
@@ -120,9 +120,16 @@ export class PDFService {
     const setting = qualitySettings[quality];
     
     try {
-      await execPromise(
-        `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${setting} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outputPath}" "${inputPath}"`
-      );
+      await execFileAsync('gs', [
+        '-sDEVICE=pdfwrite',
+        '-dCompatibilityLevel=1.4',
+        `-dPDFSETTINGS=${setting}`,
+        '-dNOPAUSE',
+        '-dQUIET',
+        '-dBATCH',
+        `-sOutputFile=${outputPath}`,
+        inputPath,
+      ]);
     } catch (error) {
       const pdfBytes = await fs.readFile(inputPath);
       const pdf = await PDFDocument.load(pdfBytes);
@@ -168,9 +175,7 @@ export class PDFService {
       const formatFlag = format === 'jpg' ? '-jpeg' : '-png';
       const prefix = path.join(outputDir, 'page');
       
-      await execPromise(
-        `pdftoppm ${formatFlag} "${inputPath}" "${prefix}"`
-      );
+      await execFileAsync('pdftoppm', [formatFlag, inputPath, prefix]);
       
       const files = await fs.readdir(outputDir);
       const extension = format === 'jpg' ? '.jpg' : '.png';
@@ -183,15 +188,17 @@ export class PDFService {
   }
 
   async protectPDF(inputPath: string, outputPath: string, password: string): Promise<void> {
+    if (!password) {
+      throw new Error('A password is required to protect this PDF.');
+    }
+    // qpdf must succeed; never silently fall back to writing an UNENCRYPTED file.
     try {
-      await execPromise(
-        `qpdf --encrypt "${password}" "${password}" 256 -- "${inputPath}" "${outputPath}"`
-      );
-    } catch (error) {
-      const pdfBytes = await fs.readFile(inputPath);
-      const pdf = await PDFDocument.load(pdfBytes);
-      const pdfBytesOut = await pdf.save();
-      await fs.writeFile(outputPath, pdfBytesOut);
+      await execFileAsync('qpdf', ['--encrypt', password, password, '256', '--', inputPath, outputPath]);
+    } catch {
+      // Do NOT surface the raw error: execFile embeds the full command line
+      // (including the password twice) in error.message, which would leak into
+      // logs, the job's error column, and the job-status API response.
+      throw new Error('Failed to encrypt PDF. Please verify the file and try again.');
     }
   }
 
@@ -204,24 +211,29 @@ export class PDFService {
       if (error.message && error.message.includes('encrypted')) {
         return true;
       }
-      const { stdout } = await execPromise(`qpdf --show-encryption "${inputPath}" 2>&1 || true`);
-      return stdout.toLowerCase().includes('encrypted') || stdout.toLowerCase().includes('password');
+      try {
+        const { stdout } = await execFileAsync('qpdf', ['--show-encryption', inputPath]);
+        const out = stdout.toLowerCase();
+        return out.includes('encrypted') || out.includes('password');
+      } catch (qpdfError: any) {
+        const out = `${qpdfError.stdout || ''}${qpdfError.stderr || ''}`.toLowerCase();
+        return out.includes('encrypted') || out.includes('password');
+      }
     }
   }
 
   async unlockPDF(inputPath: string, outputPath: string, password: string): Promise<void> {
     const isEncrypted = await this.isPDFEncrypted(inputPath);
-    
+
     if (!isEncrypted) {
       throw new Error('ALREADY_UNPROTECTED: This PDF is already unprotected. No password removal needed!');
     }
 
     try {
-      await execPromise(
-        `qpdf --password="${password}" --decrypt "${inputPath}" "${outputPath}"`
-      );
+      await execFileAsync('qpdf', [`--password=${password}`, '--decrypt', inputPath, outputPath]);
     } catch (error: any) {
-      if (error.message && error.message.includes('invalid password')) {
+      const details = `${error.stderr || ''}${error.message || ''}`.toLowerCase();
+      if (details.includes('invalid password')) {
         throw new Error('INVALID_PASSWORD: The password you entered is incorrect. Please try again.');
       }
       const pdfBytes = await fs.readFile(inputPath);
@@ -260,9 +272,9 @@ export class PDFService {
     let previewImage: string | undefined;
     try {
       const tempPrefix = path.join(path.dirname(inputPath), `preview_${Date.now()}`);
-      await execPromise(
-        `pdftoppm -png -f 1 -l 1 -scale-to 400 "${inputPath}" "${tempPrefix}"`
-      );
+      await execFileAsync('pdftoppm', [
+        '-png', '-f', '1', '-l', '1', '-scale-to', '400', inputPath, tempPrefix,
+      ]);
       
       const tempDir = path.dirname(inputPath);
       const files = await fs.readdir(tempDir);
@@ -708,9 +720,16 @@ export class PDFService {
 
   async convertToPDFA(inputPath: string, outputPath: string): Promise<void> {
     try {
-      await execPromise(
-        `gs -dPDFA=2 -dBATCH -dNOPAUSE -sColorConversionStrategy=UseDeviceIndependentColor -sDEVICE=pdfwrite -dPDFACompatibilityPolicy=1 -sOutputFile="${outputPath}" "${inputPath}"`
-      );
+      await execFileAsync('gs', [
+        '-dPDFA=2',
+        '-dBATCH',
+        '-dNOPAUSE',
+        '-sColorConversionStrategy=UseDeviceIndependentColor',
+        '-sDEVICE=pdfwrite',
+        '-dPDFACompatibilityPolicy=1',
+        `-sOutputFile=${outputPath}`,
+        inputPath,
+      ]);
     } catch (error) {
       const pdfBytes = await fs.readFile(inputPath);
       const pdf = await PDFDocument.load(pdfBytes);
@@ -722,11 +741,11 @@ export class PDFService {
   async pdfToText(inputPath: string, outputPath: string): Promise<void> {
     try {
       // Use pdftotext from poppler-utils for accurate text extraction
-      await execPromise(`pdftotext -layout "${inputPath}" "${outputPath}"`);
+      await execFileAsync('pdftotext', ['-layout', inputPath, outputPath]);
     } catch (error) {
       // Fallback: try without layout option
       try {
-        await execPromise(`pdftotext "${inputPath}" "${outputPath}"`);
+        await execFileAsync('pdftotext', [inputPath, outputPath]);
       } catch (fallbackError) {
         // Last resort: create empty text file with error message
         await fs.writeFile(outputPath, `Unable to extract text from PDF. The file may be scanned or image-based.\n\nTip: For scanned PDFs, try our OCR tool instead! (Coming soon)`);
@@ -738,7 +757,7 @@ export class PDFService {
     try {
       // Use pdfimages from poppler-utils to extract embedded images
       const prefix = path.join(outputDir, 'image');
-      await execPromise(`pdfimages -all "${inputPath}" "${prefix}"`);
+      await execFileAsync('pdfimages', ['-all', inputPath, prefix]);
       
       const files = await fs.readdir(outputDir);
       const imageFiles = files
