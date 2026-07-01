@@ -38,7 +38,7 @@ const THUMBNAIL_SCALE = 0.5;
 const FILE_THUMBNAIL_SCALE = 0.15;
 
 function MergeEditorComponent({ files, onReorder, onRemove, onPageOrderChange }: MergeEditorProps) {
-  const [mode, setMode] = useState<"file" | "page">("file");
+  const [mode, setMode] = useState<"file" | "page">("page");
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [fileInfos, setFileInfos] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);

@@ -125,7 +125,11 @@ describe('PDFService', () => {
   it('merges, splits, removes, extracts, and organizes pages', async () => {
     await service.mergePDFs(['a.pdf', 'b.pdf'], 'merged.pdf');
     await service.mergePDFs(['a.pdf'], 'ordered.pdf', [{ fileIndex: 0, pageNumber: 2 }, { fileIndex: 99, pageNumber: 1 }]);
-    await expect(service.splitPDF('in.pdf', [{ start: 1, end: 2 }], '/out')).resolves.toEqual(['/out/split_1.pdf']);
+    const splitResult = await service.splitPDF('in.pdf', [{ start: 1, end: 2 }], '/out');
+    // Written into a unique per-job subdir to avoid concurrent split_N collisions.
+    expect(splitResult).toHaveLength(1);
+    expect(splitResult[0]).toMatch(/^\/out\/split_[^/]+\/split_1\.pdf$/);
+    expect(mocks.fs.mkdir).toHaveBeenCalledWith(expect.stringMatching(/^\/out\/split_/), { recursive: true });
     await service.removePages('in.pdf', [2], 'removed.pdf');
     await service.extractPages('in.pdf', [1, 3], 'extract.pdf');
     await service.organizePDF('in.pdf', [], { 2: 90 }, 'organized.pdf');
@@ -162,9 +166,13 @@ describe('PDFService', () => {
   });
 
   it('converts PDFs to images and reports failures', async () => {
-    mocks.fs.readdir.mockResolvedValueOnce(['page-1.jpg', 'page-2.png', 'other.txt']);
-    await expect(service.pdfToImages('in.pdf', '/imgs', 'png')).resolves.toEqual(['/imgs/page-1.jpg', '/imgs/page-2.png']);
-    expect(execFile).toHaveBeenCalledWith('pdftoppm', ['-png', 'in.pdf', '/imgs/page'], expect.any(Function));
+    mocks.fs.readdir.mockResolvedValueOnce(['page-2.png', 'page-1.jpg', 'other.txt']);
+    const result = await service.pdfToImages('in.pdf', '/imgs', 'png');
+    // Rendered into a unique per-job subdir; ordered by page number.
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatch(/^\/imgs\/pdf2img_[^/]+\/page-1\.jpg$/);
+    expect(result[1]).toMatch(/^\/imgs\/pdf2img_[^/]+\/page-2\.png$/);
+    expect(execFile).toHaveBeenCalledWith('pdftoppm', ['-png', 'in.pdf', expect.stringMatching(/^\/imgs\/pdf2img_[^/]+\/page$/)], expect.any(Function));
 
     execFails(new Error('missing tool'));
     await expect(service.pdfToImages('in.pdf', '/imgs')).rejects.toThrow('Failed to convert PDF to images');
@@ -236,9 +244,14 @@ describe('PDFService', () => {
 
   it('extracts images, converts ppm/pbm, handles none and tool failures', async () => {
     mocks.fs.readdir.mockResolvedValueOnce(['image-1.jpg', 'image-2.ppm', 'image-3.pbm', 'skip.txt']);
-    await expect(service.extractImages('in.pdf', '/imgs')).resolves.toEqual(['/imgs/image-1.jpg', '/imgs/image-2.png', '/imgs/image-3.png']);
-    expect(sharp).toHaveBeenCalledWith('/imgs/image-2.ppm');
-    expect(mocks.fs.unlink).toHaveBeenCalledWith('/imgs/image-2.ppm');
+    const result = await service.extractImages('in.pdf', '/imgs');
+    // Extracted into a unique per-job subdir (pdfimg_<uuid>).
+    expect(result).toHaveLength(3);
+    expect(result[0]).toMatch(/^\/imgs\/pdfimg_[^/]+\/image-1\.jpg$/);
+    expect(result[1]).toMatch(/^\/imgs\/pdfimg_[^/]+\/image-2\.png$/);
+    expect(result[2]).toMatch(/^\/imgs\/pdfimg_[^/]+\/image-3\.png$/);
+    expect(sharp).toHaveBeenCalledWith(expect.stringMatching(/^\/imgs\/pdfimg_[^/]+\/image-2\.ppm$/));
+    expect(mocks.fs.unlink).toHaveBeenCalledWith(expect.stringMatching(/^\/imgs\/pdfimg_[^/]+\/image-2\.ppm$/));
 
     mocks.fs.readdir.mockResolvedValueOnce([]);
     await expect(service.extractImages('in.pdf', '/imgs')).rejects.toThrow('No images found');

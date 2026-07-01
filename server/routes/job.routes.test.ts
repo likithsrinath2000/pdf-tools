@@ -77,8 +77,11 @@ vi.mock("../logger", () => ({
 
 function makeApp() {
   const app = express();
-  app.response.download = function (this: any, filePath: string, fileName: string) {
-    return this.status(200).json({ filePath, fileName });
+  app.response.download = function (this: any, filePath: string, fileName: string, cb?: (err?: Error) => void) {
+    this.status(200).json({ filePath, fileName });
+    // Simulate a successful transfer so the post-download purge runs.
+    if (cb) cb();
+    return this;
   } as any;
   app.use("/jobs", router);
   return app;
@@ -125,7 +128,7 @@ describe("job routes", () => {
     expect(badJson.status).toBe(500);
   });
 
-  it("gets, downloads, and deletes jobs", async () => {
+  it("gets jobs and purges output+inputs after a successful download", async () => {
     const app = makeApp();
     const job = { id: "job-x", status: "completed", outputFile: "output_files/out.pdf", inputFiles: [{ path: "uploads/in.pdf" }] };
     mocks.jobs.set(job.id, job);
@@ -135,13 +138,24 @@ describe("job routes", () => {
     expect((await request(app).get("/jobs/missing/download")).status).toBe(404);
     mocks.jobs.set("job-p", { id: "job-p", status: "processing" });
     expect((await request(app).get("/jobs/job-p/download")).status).toBe(400);
-    expect((await request(app).get("/jobs/job-x/download")).body).toEqual({ filePath: "output_files/out.pdf", fileName: "out.pdf" });
 
-    const deleted = await request(app).delete("/jobs/job-x");
-    expect(deleted.body).toEqual({ success: true });
+    expect((await request(app).get("/jobs/job-x/download")).body).toEqual({ filePath: "output_files/out.pdf", fileName: "out.pdf" });
+    await flush();
+    // Output + inputs deleted and the job row purged immediately after download.
     expect(mocks.fsPromises.unlink).toHaveBeenCalledWith("output_files/out.pdf");
     expect(mocks.fsPromises.unlink).toHaveBeenCalledWith("uploads/in.pdf");
     expect(mocks.storage.deleteJob).toHaveBeenCalledWith("job-x");
+  });
+
+  it("deletes a job and its files on request", async () => {
+    const app = makeApp();
+    mocks.jobs.set("job-d", { id: "job-d", status: "completed", outputFile: "output_files/d.pdf", inputFiles: [{ path: "uploads/d-in.pdf" }] });
+
+    const deleted = await request(app).delete("/jobs/job-d");
+    expect(deleted.body).toEqual({ success: true });
+    expect(mocks.fsPromises.unlink).toHaveBeenCalledWith("output_files/d.pdf");
+    expect(mocks.fsPromises.unlink).toHaveBeenCalledWith("uploads/d-in.pdf");
+    expect(mocks.storage.deleteJob).toHaveBeenCalledWith("job-d");
   });
 
   it("processes PDF, image, and office tool switch branches", async () => {

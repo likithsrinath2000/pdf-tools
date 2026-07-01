@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 
 interface VisualCompressEditorProps {
   imageFile: File | null;
-  onChange: (quality: string) => void;
+  onChange: (quality: number) => void;
 }
 
 export function VisualCompressEditor({ imageFile, onChange }: VisualCompressEditorProps) {
@@ -36,11 +36,12 @@ export function VisualCompressEditor({ imageFile, onChange }: VisualCompressEdit
   }, [imageFile]);
 
   useEffect(() => {
-    if (useCustom) {
-      onChangeRef.current(`custom-${customQuality}`);
-    } else {
-      onChangeRef.current(quality);
-    }
+    // Emit an integer quality (1-100) that image compression (sharp / canvas)
+    // expects — NOT the internal preset string. Named presets map to numbers.
+    const presetQuality: Record<string, number> = { low: 30, medium: 60, high: 85 };
+    const q = useCustom ? customQuality : (presetQuality[quality] ?? 60);
+    const clamped = Math.min(100, Math.max(1, Math.round(q)));
+    onChangeRef.current(clamped);
   }, [quality, customQuality, useCustom]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { promisify } from 'util';
 import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import officegen from 'officegen';
@@ -10,38 +11,57 @@ import { createWriteStream } from 'fs';
 const execFileAsync = promisify(execFile);
 
 export class OfficeService {
-  async convertToPDF(inputPath: string, outputPath: string): Promise<void> {
-    const outputDir = path.dirname(outputPath);
-    const baseName = path.basename(inputPath);
-    
+  /**
+   * Runs a LibreOffice conversion into a unique, empty working directory and
+   * moves the single produced file to `outputPath`.
+   *
+   * This avoids a cross-job data leak: reading converted files back from the
+   * shared output directory by extension (e.g. "the first *.docx") could return
+   * another concurrent/earlier job's document. A per-job directory guarantees
+   * the only matching file is this job's own output.
+   */
+  private async libreOfficeConvert(
+    inputPath: string,
+    convertTo: string,
+    ext: string,
+    outputPath: string
+  ): Promise<void> {
+    const workDir = path.join(path.dirname(outputPath), `lo_${randomUUID()}`);
+    await fs.mkdir(workDir, { recursive: true });
+    // Isolated LibreOffice profile per invocation. Without this, concurrent
+    // `libreoffice --headless` processes contend on the shared user profile
+    // lock (~/.config/libreoffice) and all but one fail.
+    const profileDir = path.resolve(workDir, 'profile');
     try {
       await execFileAsync('libreoffice', [
-        '--headless', '--convert-to', 'pdf', '--outdir', outputDir, inputPath,
+        '--headless',
+        `-env:UserInstallation=file://${profileDir}`,
+        '--convert-to', convertTo,
+        '--outdir', workDir,
+        inputPath,
       ]);
-      
-      const files = await fs.readdir(outputDir);
-      const pdfFile = files.find(f => f.endsWith('.pdf') && f.includes(baseName.substring(0, 8)));
-      
-      if (pdfFile) {
-        const generatedPath = path.join(outputDir, pdfFile);
-        if (generatedPath !== outputPath) {
-          await fs.rename(generatedPath, outputPath);
-        }
-      } else {
-        const anyPdf = files.find(f => f.endsWith('.pdf') && !f.includes('pdf-to-'));
-        if (anyPdf) {
-          await fs.rename(path.join(outputDir, anyPdf), outputPath);
-        } else {
-          throw new Error('No PDF file generated');
-        }
+      const produced = (await fs.readdir(workDir))
+        .find(f => f !== 'profile' && f.toLowerCase().endsWith(ext.toLowerCase()));
+      if (!produced) {
+        throw new Error(`No ${ext} file generated`);
       }
-    } catch (error) {
-      throw new Error(`Failed to convert office document to PDF: ${error}`);
+      await fs.rename(path.join(workDir, produced), outputPath);
+    } finally {
+      await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  async convertToPDF(inputPath: string, outputPath: string): Promise<void> {
+    try {
+      await this.libreOfficeConvert(inputPath, 'pdf', '.pdf', outputPath);
+    } catch (error: any) {
+      throw new Error(`Failed to convert office document to PDF: ${error.message || error}`);
     }
   }
 
   async pdfToWord(inputPath: string, outputPath: string): Promise<void> {
-    const outputDir = path.dirname(outputPath);
+    // Unique temp HTML input so concurrent jobs never collide.
+    const htmlPath = path.join(path.dirname(outputPath), `pdf2word_${randomUUID()}.html`);
 
     try {
       const pdfBytes = await fs.readFile(inputPath);
@@ -61,42 +81,21 @@ export class OfficeService {
       }
       docContent += '</body></html>';
       
-      const htmlPath = outputPath.replace('.docx', '.html');
       await fs.writeFile(htmlPath, docContent);
       
-      await execFileAsync('libreoffice', [
-        '--headless',
-        // Explicit export filter: HTML input opens in Writer/Web mode, which has
-        // no direct docx export filter ("no export filter" error) unless named.
-        '--convert-to', 'docx:MS Word 2007 XML',
-        '--outdir', outputDir,
-        htmlPath,
-      ]);
-      
-      const files = await fs.readdir(outputDir);
-      const docxFile = files.find(f => f.endsWith('.docx'));
-      
-      if (docxFile) {
-        const generatedPath = path.join(outputDir, docxFile);
-        if (generatedPath !== outputPath) {
-          await fs.rename(generatedPath, outputPath);
-        }
-      }
-      
-      await fs.unlink(htmlPath).catch(() => {});
-      
-      const exists = await fs.access(outputPath).then(() => true).catch(() => false);
-      if (!exists) {
-        throw new Error('Failed to generate DOCX file');
-      }
+      // Explicit export filter: HTML input opens in Writer/Web mode, which has
+      // no direct docx export filter ("no export filter" error) unless named.
+      await this.libreOfficeConvert(htmlPath, 'docx:MS Word 2007 XML', '.docx', outputPath);
     } catch (error: any) {
       throw new Error(`Failed to convert PDF to Word: ${error.message}`);
+    } finally {
+      await fs.unlink(htmlPath).catch(() => {});
     }
   }
 
   async pdfToExcel(inputPath: string, outputPath: string): Promise<void> {
-    const outputDir = path.dirname(outputPath);
-    
+    const csvPath = path.join(path.dirname(outputPath), `pdf2excel_${randomUUID()}.csv`);
+
     try {
       const pdfBytes = await fs.readFile(inputPath);
       const pdf = await PDFDocument.load(pdfBytes);
@@ -107,37 +106,19 @@ export class OfficeService {
         csvContent += `${i + 1},"Page ${i + 1} content","Extracted from PDF"\n`;
       }
       
-      const csvPath = outputPath.replace('.xlsx', '.csv');
       await fs.writeFile(csvPath, csvContent);
       
-      await execFileAsync('libreoffice', [
-        '--headless', '--convert-to', 'xlsx', '--outdir', outputDir, csvPath,
-      ]);
-      
-      const files = await fs.readdir(outputDir);
-      const xlsxFile = files.find(f => f.endsWith('.xlsx'));
-      
-      if (xlsxFile) {
-        const generatedPath = path.join(outputDir, xlsxFile);
-        if (generatedPath !== outputPath) {
-          await fs.rename(generatedPath, outputPath);
-        }
-      }
-      
-      await fs.unlink(csvPath).catch(() => {});
-      
-      const exists = await fs.access(outputPath).then(() => true).catch(() => false);
-      if (!exists) {
-        throw new Error('Failed to generate XLSX file');
-      }
+      await this.libreOfficeConvert(csvPath, 'xlsx', '.xlsx', outputPath);
     } catch (error: any) {
       throw new Error(`Failed to convert PDF to Excel: ${error.message}`);
+    } finally {
+      await fs.unlink(csvPath).catch(() => {});
     }
   }
 
   async pdfToPowerPoint(inputPath: string, outputPath: string): Promise<void> {
-    const outputDir = path.dirname(outputPath);
-    const tempDir = path.join(outputDir, `pptx_temp_${Date.now()}`);
+    // Unique per-job temp dir (randomUUID, not Date.now which can collide).
+    const tempDir = path.join(path.dirname(outputPath), `pptx_${randomUUID()}`);
     
     try {
       await fs.mkdir(tempDir, { recursive: true });
@@ -168,39 +149,14 @@ export class OfficeService {
       const htmlPath = path.join(tempDir, 'slides.html');
       await fs.writeFile(htmlPath, htmlContent);
       
-      await execFileAsync('libreoffice', [
-        '--headless',
-        // Explicit export filter: HTML input opens in Impress web mode, which has
-        // no direct pptx export filter unless the filter is named explicitly.
-        '--convert-to', 'pptx:Impress MS PowerPoint 2007 XML',
-        '--outdir', outputDir,
-        htmlPath,
-      ]);
-      
-      const outputFiles = await fs.readdir(outputDir);
-      const pptxFile = outputFiles.find(f => f.endsWith('.pptx') && f.includes('slides'));
-      
-      if (pptxFile) {
-        const generatedPath = path.join(outputDir, pptxFile);
-        if (generatedPath !== outputPath) {
-          await fs.rename(generatedPath, outputPath);
-        }
-      } else {
-        const anyPptx = outputFiles.find(f => f.endsWith('.pptx'));
-        if (anyPptx) {
-          await fs.rename(path.join(outputDir, anyPptx), outputPath);
-        }
-      }
-      
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-      
-      const exists = await fs.access(outputPath).then(() => true).catch(() => false);
-      if (!exists) {
-        throw new Error('Failed to generate PPTX file');
-      }
+      // Explicit export filter: HTML input opens in Impress web mode, which has
+      // no direct pptx export filter unless the filter is named explicitly.
+      // Convert into a unique dir so we never pick up another job's pptx.
+      await this.libreOfficeConvert(htmlPath, 'pptx:Impress MS PowerPoint 2007 XML', '.pptx', outputPath);
     } catch (error: any) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
       throw new Error(`Failed to convert PDF to PowerPoint: ${error.message}`);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
