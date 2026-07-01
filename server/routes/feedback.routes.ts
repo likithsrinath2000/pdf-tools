@@ -18,6 +18,15 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Feedback is required" });
     }
 
+    const MAX_FEEDBACK_CHARS = 5000;
+    const MAX_EMAIL_CHARS = 254;
+    if (feedback.length > MAX_FEEDBACK_CHARS) {
+      return res.status(400).json({ error: `Feedback must be ${MAX_FEEDBACK_CHARS} characters or fewer.` });
+    }
+    if (email && (typeof email !== "string" || email.length > MAX_EMAIL_CHARS)) {
+      return res.status(400).json({ error: `Email must be ${MAX_EMAIL_CHARS} characters or fewer.` });
+    }
+
     const savedFeedback = await storage.createFeedback({
       feedback: feedback.trim(),
       email: email?.trim() || null,

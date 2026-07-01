@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const state = { returningRows: [] as any[], selectRows: [] as any[] };
+  const state = { returningRows: [] as any[], selectRows: [] as any[], deleteRows: [] as any[] };
   const insertChain = { values: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve(state.returningRows)) })) };
   const updateChain = { set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) };
-  const deleteChain = { where: vi.fn(() => Promise.resolve()) };
+  const deleteChain = {
+    where: vi.fn(() => ({
+      returning: vi.fn(() => Promise.resolve(state.deleteRows)),
+      then: (resolve: (v: unknown) => void) => Promise.resolve().then(resolve),
+    })),
+  };
   const selectChain = {
     from: vi.fn(() => ({
       where: vi.fn(() => Promise.resolve(state.selectRows)),
@@ -32,6 +37,7 @@ describe("DatabaseStorage", () => {
     vi.clearAllMocks();
     mocks.state.returningRows = [];
     mocks.state.selectRows = [];
+    mocks.state.deleteRows = [];
     const mod = await import("./storage");
     storage = new mod.DatabaseStorage();
   });
@@ -70,6 +76,14 @@ describe("DatabaseStorage", () => {
 
     await storage.deleteJob("job-1");
     expect(mocks.db.delete).toHaveBeenCalled();
+  });
+
+  it("deletes jobs older than a cutoff and reports the count", async () => {
+    mocks.state.deleteRows = [{ id: "job-1" }, { id: "job-2" }];
+    const removed = await storage.deleteJobsOlderThan(new Date("2020-01-01T00:00:00Z"));
+    expect(removed).toBe(2);
+    expect(mocks.db.delete).toHaveBeenCalled();
+    expect(mocks.deleteChain.where).toHaveBeenCalled();
   });
 
   it("returns recent jobs and feedback ordered by creation time", async () => {

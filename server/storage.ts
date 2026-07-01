@@ -1,6 +1,6 @@
 import { processingJobs, feedbacks, type ProcessingJob, type InsertProcessingJob, type Feedback, type InsertFeedback } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, lt } from "drizzle-orm";
 
 export interface IStorage {
   createJob(job: InsertProcessingJob): Promise<ProcessingJob>;
@@ -10,6 +10,7 @@ export interface IStorage {
   updateJobError(id: string, error: string): Promise<void>;
   getRecentJobs(limit?: number): Promise<ProcessingJob[]>;
   deleteJob(id: string): Promise<void>;
+  deleteJobsOlderThan(cutoff: Date): Promise<number>;
   createFeedback(feedback: InsertFeedback): Promise<Feedback>;
   getAllFeedback(): Promise<Feedback[]>;
 }
@@ -71,6 +72,19 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(processingJobs)
       .where(eq(processingJobs.id, id));
+  }
+
+  /**
+   * Removes job rows created before `cutoff` so the table doesn't grow forever
+   * with stale records once their files have been cleaned up. Returns the
+   * number of rows deleted.
+   */
+  async deleteJobsOlderThan(cutoff: Date): Promise<number> {
+    const deleted = await db
+      .delete(processingJobs)
+      .where(lt(processingJobs.createdAt, cutoff))
+      .returning({ id: processingJobs.id });
+    return deleted.length;
   }
 
   async createFeedback(insertFeedback: InsertFeedback): Promise<Feedback> {

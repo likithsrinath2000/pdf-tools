@@ -29,6 +29,14 @@ const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MINUTES || '1'
 
 export class CleanupService {
   private intervalId: NodeJS.Timeout | null = null;
+  // Optional hook to purge stale DB job rows, injected at startup so this
+  // service stays free of a direct database dependency (and unit-testable
+  // without a DB). Best-effort: DB failures never block file cleanup.
+  private jobRecordPurger: ((cutoff: Date) => Promise<number>) | null = null;
+
+  setJobRecordPurger(purger: (cutoff: Date) => Promise<number>): void {
+    this.jobRecordPurger = purger;
+  }
 
   async cleanupOldFiles(): Promise<{ filesDeleted: number; bytesFreed: number }> {
     let filesDeleted = 0;
@@ -44,6 +52,18 @@ export class CleanupService {
 
     if (filesDeleted > 0) {
       logCleanup(filesDeleted, bytesFreed);
+    }
+
+    // Purge stale job records so the DB doesn't accumulate rows indefinitely.
+    if (this.jobRecordPurger) {
+      try {
+        const removed = await this.jobRecordPurger(new Date(now - FILE_MAX_AGE_MS));
+        if (removed > 0) {
+          logger.debug(`Removed ${removed} stale job record(s)`);
+        }
+      } catch (error: any) {
+        logger.error('Job record cleanup error:', { error: error.message });
+      }
     }
 
     return { filesDeleted, bytesFreed };

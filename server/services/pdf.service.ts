@@ -8,6 +8,13 @@ import path from 'path';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Wall-clock ceiling for external CLI tools (Ghostscript, poppler, qpdf). These
+ * process untrusted user files, so a runaway/maliciously-crafted document must
+ * never be able to pin a worker forever. Override with CLI_TIMEOUT_MS.
+ */
+const EXEC_TIMEOUT_MS = parseInt(process.env.CLI_TIMEOUT_MS || "120000", 10);
+
 export class PDFService {
   async mergePDFs(inputPaths: string[], outputPath: string, pageOrder?: { fileIndex: number; pageNumber: number }[]): Promise<void> {
     const mergedPdf = await PDFDocument.create();
@@ -127,6 +134,7 @@ export class PDFService {
     
     try {
       await execFileAsync('gs', [
+        '-dSAFER',
         '-sDEVICE=pdfwrite',
         '-dCompatibilityLevel=1.4',
         `-dPDFSETTINGS=${setting}`,
@@ -135,7 +143,7 @@ export class PDFService {
         '-dBATCH',
         `-sOutputFile=${outputPath}`,
         inputPath,
-      ]);
+      ], { timeout: EXEC_TIMEOUT_MS });
     } catch (error) {
       const pdfBytes = await fs.readFile(inputPath);
       const pdf = await PDFDocument.load(pdfBytes);
@@ -185,7 +193,7 @@ export class PDFService {
       const formatFlag = format === 'jpg' ? '-jpeg' : '-png';
       const prefix = path.join(jobDir, 'page');
       
-      await execFileAsync('pdftoppm', [formatFlag, inputPath, prefix]);
+      await execFileAsync('pdftoppm', [formatFlag, inputPath, prefix], { timeout: EXEC_TIMEOUT_MS });
       
       const files = await fs.readdir(jobDir);
       return files
@@ -204,7 +212,7 @@ export class PDFService {
     }
     // qpdf must succeed; never silently fall back to writing an UNENCRYPTED file.
     try {
-      await execFileAsync('qpdf', ['--encrypt', password, password, '256', '--', inputPath, outputPath]);
+      await execFileAsync('qpdf', ['--encrypt', password, password, '256', '--', inputPath, outputPath], { timeout: EXEC_TIMEOUT_MS });
     } catch {
       // Do NOT surface the raw error: execFile embeds the full command line
       // (including the password twice) in error.message, which would leak into
@@ -223,7 +231,7 @@ export class PDFService {
         return true;
       }
       try {
-        const { stdout } = await execFileAsync('qpdf', ['--show-encryption', inputPath]);
+        const { stdout } = await execFileAsync('qpdf', ['--show-encryption', inputPath], { timeout: EXEC_TIMEOUT_MS });
         const out = stdout.toLowerCase();
         return out.includes('encrypted') || out.includes('password');
       } catch (qpdfError: any) {
@@ -241,7 +249,7 @@ export class PDFService {
     }
 
     try {
-      await execFileAsync('qpdf', [`--password=${password}`, '--decrypt', inputPath, outputPath]);
+      await execFileAsync('qpdf', [`--password=${password}`, '--decrypt', inputPath, outputPath], { timeout: EXEC_TIMEOUT_MS });
     } catch (error: any) {
       const details = `${error.stderr || ''}${error.message || ''}`.toLowerCase();
       if (details.includes('invalid password')) {
@@ -282,14 +290,17 @@ export class PDFService {
     
     let previewImage: string | undefined;
     try {
-      const tempPrefix = path.join(path.dirname(inputPath), `preview_${Date.now()}`);
+      const previewName = `preview_${randomUUID()}`;
+      const tempPrefix = path.join(path.dirname(inputPath), previewName);
       await execFileAsync('pdftoppm', [
         '-png', '-f', '1', '-l', '1', '-scale-to', '400', inputPath, tempPrefix,
-      ]);
+      ], { timeout: EXEC_TIMEOUT_MS });
       
       const tempDir = path.dirname(inputPath);
       const files = await fs.readdir(tempDir);
-      const previewFile = files.find(f => f.startsWith(`preview_`) && f.endsWith('.png'));
+      // Match only this invocation's unique prefix so a concurrent preview can
+      // never have its image returned to another user.
+      const previewFile = files.find(f => f.startsWith(previewName) && f.endsWith('.png'));
       
       if (previewFile) {
         const previewPath = path.join(tempDir, previewFile);
@@ -566,6 +577,10 @@ export class PDFService {
     for (const annotation of annotations) {
       const pageIdx = annotation.page - 1;
       if (pageIdx < 0 || pageIdx >= pages.length) continue;
+
+      // Skip annotations with non-finite geometry so malformed input can't
+      // produce NaN coordinates or unbounded draw operations.
+      if (!Number.isFinite(annotation.x) || !Number.isFinite(annotation.y)) continue;
       
       const page = pages[pageIdx];
       const { width: pageWidth, height: pageHeight } = page.getSize();
@@ -682,9 +697,22 @@ export class PDFService {
       const page = pages[pageIdx];
       
       if (options.signatureType === 'drawn' && options.signatureImage) {
-        const base64Data = options.signatureImage.replace(/^data:image\/png;base64,/, '');
-        const imageBytes = Buffer.from(base64Data, 'base64');
-        const pngImage = await pdf.embedPng(imageBytes);
+        const prefix = 'data:image/png;base64,';
+        if (!options.signatureImage.startsWith(prefix)) {
+          throw new Error('Invalid signature image. A PNG data URL is required.');
+        }
+        const base64Data = options.signatureImage.slice(prefix.length);
+        const rawBytes = Buffer.from(base64Data, 'base64');
+
+        const MAX_SIGNATURE_BYTES = 5 * 1024 * 1024;
+        if (rawBytes.length === 0 || rawBytes.length > MAX_SIGNATURE_BYTES) {
+          throw new Error('Signature image is missing or exceeds the 5MB limit.');
+        }
+
+        // Re-encode through sharp so arbitrary/malformed binary is normalized to
+        // a clean PNG before it reaches pdf-lib's parser.
+        const safePng = await sharp(rawBytes).png().toBuffer();
+        const pngImage = await pdf.embedPng(safePng);
         
         const baseScaleFactor = 0.5;
         const imgWidth = pngImage.width * baseScaleFactor * scale;
@@ -723,8 +751,14 @@ export class PDFService {
   }
 
   async repairPDF(inputPath: string, outputPath: string): Promise<void> {
+    // Never silently strip protection: an encrypted PDF opened with
+    // `ignoreEncryption` and re-saved would come out password-free, turning
+    // "repair" into an unlock that bypasses the intended Unlock-PDF flow.
+    if (await this.isPDFEncrypted(inputPath)) {
+      throw new Error('ENCRYPTED_PDF: This PDF is password-protected. Remove the password with the Unlock PDF tool first, then repair it.');
+    }
     const pdfBytes = await fs.readFile(inputPath);
-    const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const pdf = await PDFDocument.load(pdfBytes);
     const repairedBytes = await pdf.save();
     await fs.writeFile(outputPath, repairedBytes);
   }
@@ -732,6 +766,7 @@ export class PDFService {
   async convertToPDFA(inputPath: string, outputPath: string): Promise<void> {
     try {
       await execFileAsync('gs', [
+        '-dSAFER',
         '-dPDFA=2',
         '-dBATCH',
         '-dNOPAUSE',
@@ -740,7 +775,7 @@ export class PDFService {
         '-dPDFACompatibilityPolicy=1',
         `-sOutputFile=${outputPath}`,
         inputPath,
-      ]);
+      ], { timeout: EXEC_TIMEOUT_MS });
     } catch (error) {
       const pdfBytes = await fs.readFile(inputPath);
       const pdf = await PDFDocument.load(pdfBytes);
@@ -752,11 +787,11 @@ export class PDFService {
   async pdfToText(inputPath: string, outputPath: string): Promise<void> {
     try {
       // Use pdftotext from poppler-utils for accurate text extraction
-      await execFileAsync('pdftotext', ['-layout', inputPath, outputPath]);
+      await execFileAsync('pdftotext', ['-layout', inputPath, outputPath], { timeout: EXEC_TIMEOUT_MS });
     } catch (error) {
       // Fallback: try without layout option
       try {
-        await execFileAsync('pdftotext', [inputPath, outputPath]);
+        await execFileAsync('pdftotext', [inputPath, outputPath], { timeout: EXEC_TIMEOUT_MS });
       } catch (fallbackError) {
         // Last resort: create empty text file with error message
         await fs.writeFile(outputPath, `Unable to extract text from PDF. The file may be scanned or image-based.\n\nTip: For scanned PDFs, try our OCR tool instead! (Coming soon)`);
@@ -772,7 +807,7 @@ export class PDFService {
       await fs.mkdir(jobDir, { recursive: true });
       // Use pdfimages from poppler-utils to extract embedded images
       const prefix = path.join(jobDir, 'image');
-      await execFileAsync('pdfimages', ['-all', inputPath, prefix]);
+      await execFileAsync('pdfimages', ['-all', inputPath, prefix], { timeout: EXEC_TIMEOUT_MS });
       
       const files = await fs.readdir(jobDir);
       const imageFiles = files

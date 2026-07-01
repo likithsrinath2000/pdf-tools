@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('child_process', () => ({ execFile: mocks.execFile }));
+vi.mock('crypto', () => ({ randomUUID: () => 'fixed' }));
 vi.mock('fs/promises', () => ({ default: mocks.fs, ...mocks.fs }));
 vi.mock('sharp', () => ({ default: mocks.sharp }));
 vi.mock('pdf-lib', () => ({
@@ -56,10 +57,10 @@ function makeDoc(pageCount = 3) {
 }
 
 function execSucceeds(stdout = '') {
-  mocks.execFile.mockImplementation((_cmd: string, _args: string[], cb: any) => cb(null, { stdout, stderr: '' }));
+  mocks.execFile.mockImplementation((...args: any[]) => args[args.length - 1](null, { stdout, stderr: '' }));
 }
 function execFails(error: any = new Error('fail')) {
-  mocks.execFile.mockImplementation((_cmd: string, _args: string[], cb: any) => cb(error));
+  mocks.execFile.mockImplementation((...args: any[]) => args[args.length - 1](error));
 }
 
 describe('PDFService', () => {
@@ -85,7 +86,7 @@ describe('PDFService', () => {
     await expect(service.protectPDF('in.pdf', 'out.pdf', '')).rejects.toThrow('A password is required');
 
     await service.protectPDF('in.pdf', 'out.pdf', 'secret');
-    expect(execFile).toHaveBeenCalledWith('qpdf', ['--encrypt', 'secret', 'secret', '256', '--', 'in.pdf', 'out.pdf'], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('qpdf', ['--encrypt', 'secret', 'secret', '256', '--', 'in.pdf', 'out.pdf'], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
 
     execFails(new Error('qpdf --encrypt secret secret failed'));
     await expect(service.protectPDF('in.pdf', 'out.pdf', 'secret')).rejects.toThrow('Failed to encrypt PDF');
@@ -142,7 +143,7 @@ describe('PDFService', () => {
 
   it('compresses and converts to PDF/A using gs or pdf-lib fallback', async () => {
     await service.compressPDF('in.pdf', 'out.pdf', 'low');
-    expect(execFile).toHaveBeenCalledWith('gs', expect.arrayContaining(['-dPDFSETTINGS=/screen']), expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('gs', expect.arrayContaining(['-dPDFSETTINGS=/screen']), expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
 
     execFails();
     await service.compressPDF('in.pdf', 'fallback.pdf', 'high');
@@ -152,7 +153,7 @@ describe('PDFService', () => {
 
     execSucceeds();
     await service.convertToPDFA('in.pdf', 'pdfa-gs.pdf');
-    expect(execFile).toHaveBeenCalledWith('gs', expect.arrayContaining(['-dPDFA=2']), expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('gs', expect.arrayContaining(['-dPDFA=2']), expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
   });
 
   it('builds PDFs from jpg, png, and converted images', async () => {
@@ -172,14 +173,14 @@ describe('PDFService', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatch(/^\/imgs\/pdf2img_[^/]+\/page-1\.jpg$/);
     expect(result[1]).toMatch(/^\/imgs\/pdf2img_[^/]+\/page-2\.png$/);
-    expect(execFile).toHaveBeenCalledWith('pdftoppm', ['-png', 'in.pdf', expect.stringMatching(/^\/imgs\/pdf2img_[^/]+\/page$/)], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('pdftoppm', ['-png', 'in.pdf', expect.stringMatching(/^\/imgs\/pdf2img_[^/]+\/page$/)], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
 
     execFails(new Error('missing tool'));
     await expect(service.pdfToImages('in.pdf', '/imgs')).rejects.toThrow('Failed to convert PDF to images');
   });
 
   it('gets PDF info and previews with and without generated images', async () => {
-    mocks.fs.readdir.mockResolvedValueOnce(['preview_123.png']);
+    mocks.fs.readdir.mockResolvedValueOnce(['preview_fixed-1.png']);
     mocks.fs.readFile.mockImplementation(async (p: string) => p.endsWith('.png') ? Buffer.from('png') : Buffer.from('input'));
     await expect(service.getPDFInfo('in.pdf')).resolves.toEqual({ pageCount: 3, size: 1234 });
     await expect(service.getPDFPreview('/docs/in.pdf')).resolves.toMatchObject({ pageCount: 3, width: 600, height: 800, previewImage: expect.stringContaining('data:image/png;base64') });
@@ -226,16 +227,16 @@ describe('PDFService', () => {
     await service.repairPDF('in.pdf', 'repaired.pdf');
 
     expect(mocks.fs.writeFile).toHaveBeenCalledWith('repaired.pdf', Buffer.from('pdf'));
-    expect(PDFDocument.load).toHaveBeenLastCalledWith(Buffer.from('input'), { ignoreEncryption: true });
+    expect(PDFDocument.load).toHaveBeenLastCalledWith(Buffer.from('input'));
   });
 
   it('extracts text through layout, fallback, and last-resort write', async () => {
     await service.pdfToText('in.pdf', 'out.txt');
-    expect(execFile).toHaveBeenCalledWith('pdftotext', ['-layout', 'in.pdf', 'out.txt'], expect.any(Function));
+    expect(execFile).toHaveBeenCalledWith('pdftotext', ['-layout', 'in.pdf', 'out.txt'], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
 
-    mocks.execFile.mockImplementationOnce((_c, _a, cb) => cb(new Error('layout'))).mockImplementationOnce((_c, _a, cb) => cb(null, { stdout: '', stderr: '' }));
+    mocks.execFile.mockImplementationOnce((...a: any[]) => a[a.length - 1](new Error('layout'))).mockImplementationOnce((...a: any[]) => a[a.length - 1](null, { stdout: '', stderr: '' }));
     await service.pdfToText('in.pdf', 'out.txt');
-    expect(execFile).toHaveBeenLastCalledWith('pdftotext', ['in.pdf', 'out.txt'], expect.any(Function));
+    expect(execFile).toHaveBeenLastCalledWith('pdftotext', ['in.pdf', 'out.txt'], expect.objectContaining({ timeout: expect.any(Number) }), expect.any(Function));
 
     execFails();
     await service.pdfToText('in.pdf', 'out.txt');

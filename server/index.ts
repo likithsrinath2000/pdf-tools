@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { logger, logStartup, logRequest } from "./logger";
 import { cleanupService } from "./services/cleanup.service";
+import { storage } from "./storage";
 import compression from "compression";
 import helmet from "helmet";
 import { rateLimit, cors } from "./middleware/security";
@@ -36,8 +37,13 @@ if (process.env.NODE_ENV === "production") {
         // assets aren't force-upgraded to https:// (which has no listener).
         ...(disableHttpsEnforcement ? { upgradeInsecureRequests: null } : {}),
         // Google Translate widget injects scripts from several Google origins.
+        // Note: full nonce-based hardening of the built SPA's inline scripts is
+        // out of scope here, so 'unsafe-inline' remains. 'unsafe-eval' is
+        // dropped — no first-party code needs eval()/new Function() — while
+        // 'wasm-unsafe-eval' keeps client-side WebAssembly (PDF rendering)
+        // working without re-enabling arbitrary eval.
         scriptSrc: [
-          "'self'", "'unsafe-inline'", "'unsafe-eval'",
+          "'self'", "'unsafe-inline'", "'wasm-unsafe-eval'",
           "https://translate.google.com",
           "https://translate.googleapis.com",
           "https://translate-pa.googleapis.com",
@@ -76,7 +82,13 @@ if (process.env.NODE_ENV === "production") {
   app.use(compression());
 }
 
-app.set('trust proxy', 1);
+// Trust exactly the configured number of reverse-proxy hops (default 1, our
+// nginx front). This is what makes `req.ip` trustworthy for rate limiting:
+// nginx sets `X-Forwarded-For: <client-supplied…>, <real remote addr>` and
+// Express, trusting 1 hop, reads the right-most (proxy-added) entry — so a
+// client-spoofed X-Forwarded-For cannot move the rate-limit key. Set
+// TRUST_PROXY_HOPS to match the real number of proxies in front of the app.
+app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS || "1", 10));
 
 // Global API rate limit (per IP). Set high enough that a long-running job
 // polled every second (~900 requests / 15 min) plus normal browsing/download
@@ -134,6 +146,7 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  cleanupService.setJobRecordPurger((cutoff) => storage.deleteJobsOlderThan(cutoff));
   cleanupService.start();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
