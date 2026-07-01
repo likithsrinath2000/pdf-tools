@@ -1,11 +1,27 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
+# Dependabot configuration.
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Goal: keep dependency-update noise to a single daily PR by grouping *all* npm
+# updates (version and security) together instead of one PR per package.
 
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directory: "/" # Location of package manifests
+    directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    # A group counts as one PR; this cap is a safety valve, not a per-package limit.
+    open-pull-requests-limit: 5
+    groups:
+      # All routine version bumps (major/minor/patch, prod + dev) in one PR.
+      npm-all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      # All security fixes batched into one PR as well.
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
