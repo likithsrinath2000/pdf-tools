@@ -444,6 +444,7 @@ pdftools/
 | `RATE_LIMIT_MAX` | Max API requests per IP per 15 min | 3000 |
 | `JOB_RATE_LIMIT_MAX` | Max processing jobs per IP per 15 min | 60 |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist (empty = allow all) | (all) |
+| `DISABLE_HTTPS_ENFORCEMENT` | Drop HSTS + `upgrade-insecure-requests` (set `true` only when serving over plain HTTP) | false |
 
 ## Security
 

@@ -20,10 +20,21 @@ declare module "http" {
 app.use(cors());
 
 if (process.env.NODE_ENV === "production") {
+  // When the app is served over plain HTTP (e.g. local LAN testing without TLS),
+  // the default HTTPS-forcing headers (`upgrade-insecure-requests` in the CSP and
+  // HSTS) make browsers upgrade asset requests to https:// and fail, resulting in
+  // a blank page. Set DISABLE_HTTPS_ENFORCEMENT=true to serve cleanly over HTTP.
+  // Leave it unset in real (TLS) deployments so the hardening stays in effect.
+  const disableHttpsEnforcement = process.env.DISABLE_HTTPS_ENFORCEMENT === "true";
+
   app.use(helmet({
+    hsts: disableHttpsEnforcement ? false : undefined,
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
+        // Drop `upgrade-insecure-requests` when serving over HTTP so same-origin
+        // assets aren't force-upgraded to https:// (which has no listener).
+        ...(disableHttpsEnforcement ? { upgradeInsecureRequests: null } : {}),
         // Google Translate widget injects scripts from several Google origins.
         scriptSrc: [
           "'self'", "'unsafe-inline'", "'unsafe-eval'",
