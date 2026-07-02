@@ -35,15 +35,3 @@ updates:
         applies-to: security-updates
         patterns:
           - "*"
-    ignore:
-      # Major bumps of the build/test toolchain break the current test suite and
-      # need a deliberate migration (vitest 2->4, vite 7->8, esbuild). Ignore
-      # their majors for now; remove these once migrated.
-      - dependency-name: "vitest"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@vitest/*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "vite"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "esbuild"
-        update-types: ["version-update:semver-major"]
