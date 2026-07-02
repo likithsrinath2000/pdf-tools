@@ -64,7 +64,8 @@ function OrganizePdfEditorComponent({ files, onOptionsChange }: OrganizePdfEdito
       try {
         const fileHash = await getFileHash(file);
         const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdfDoc = await loadingTask.promise;
         const pageInfos: PageInfo[] = [];
         const totalPages = pdfDoc.numPages;
         
@@ -101,7 +102,7 @@ function OrganizePdfEditorComponent({ files, onOptionsChange }: OrganizePdfEdito
         
         setPages(pageInfos);
         processedFileRef.current = fileKey;
-        pdfDoc.destroy();
+        await loadingTask.destroy();
       } catch (err) {
         console.error("Error loading PDF:", err);
       } finally {

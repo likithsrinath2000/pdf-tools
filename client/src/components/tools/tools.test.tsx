@@ -64,7 +64,7 @@ vi.mock('react-image-crop/dist/ReactCrop.css', () => ({}));
 vi.mock('@/lib/thumbnailCache', () => ({ getFileHash: vi.fn(async () => 'hash'), generateCacheKey: vi.fn((h,p,s) => `${h}-${p}-${s}`), getCachedThumbnail: vi.fn(async () => null), setCachedThumbnail: vi.fn(async () => undefined) }));
 vi.mock('pdfjs-dist', () => {
   const page = { getViewport: vi.fn(() => ({ width: 120, height: 160 })), render: vi.fn(() => ({ promise: Promise.resolve() })) };
-  return { GlobalWorkerOptions: {}, getDocument: vi.fn(() => ({ promise: Promise.resolve({ numPages: 3, getPage: vi.fn(async () => page), destroy: vi.fn() }) })) };
+  return { GlobalWorkerOptions: {}, getDocument: vi.fn(() => ({ promise: Promise.resolve({ numPages: 3, getPage: vi.fn(async () => page), cleanup: vi.fn() }), destroy: vi.fn(async () => undefined) })) };
 });
 
 import { CompressOptions } from './CompressOptions';

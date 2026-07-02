@@ -49,7 +49,8 @@ export function ExtractPagesEditor({ files, onOptionsChange }: ExtractPagesEdito
       try {
         const file = files[0];
         const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdfDoc = await loadingTask.promise;
         const pageInfos: PageInfo[] = [];
         
         for (let i = 1; i <= pdfDoc.numPages; i++) {
@@ -61,7 +62,7 @@ export function ExtractPagesEditor({ files, onOptionsChange }: ExtractPagesEdito
           });
         }
         setPages(pageInfos);
-        pdfDoc.destroy();
+        await loadingTask.destroy();
       } catch (err) {
         console.error("Error loading PDF:", err);
       } finally {
