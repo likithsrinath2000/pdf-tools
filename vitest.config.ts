@@ -17,6 +17,10 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    // Heavy client component tests can exceed the 5s default on constrained
+    // machines (CI runners, the Pi); give them headroom to avoid timeout flakes.
+    testTimeout: 20000,
+    hookTimeout: 20000,
     // Vitest 4 removed `environmentMatchGlobs`; per-directory environments are
     // now expressed as projects. Each project inherits the root config
     // (alias/globals/setup) via `extends: true`.
@@ -26,6 +30,7 @@ export default defineConfig({
         test: {
           name: "client",
           environment: "jsdom",
+          setupFiles: ["./vitest.setup.ts", "./vitest.setup.client.ts"],
           include: ["client/src/**/*.{test,spec}.{ts,tsx}"],
         },
       },
