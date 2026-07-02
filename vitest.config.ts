@@ -21,6 +21,10 @@ export default defineConfig({
     // machines (CI runners, the Pi); give them headroom to avoid timeout flakes.
     testTimeout: 20000,
     hookTimeout: 20000,
+    // Retry inherently-flaky UI tests a couple of times before failing. A truly
+    // broken test still fails all attempts; this only absorbs transient
+    // render/timeout hiccups under load so CI and the deploy gate stay reliable.
+    retry: 2,
     // Vitest 4 removed `environmentMatchGlobs`; per-directory environments are
     // now expressed as projects. Each project inherits the root config
     // (alias/globals/setup) via `extends: true`.

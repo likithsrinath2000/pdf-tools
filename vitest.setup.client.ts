@@ -1,9 +1,16 @@
-import { afterEach } from "vitest";
+import { afterEach, beforeEach } from "vitest";
 import { cleanup } from "@testing-library/react";
 
-// Unmount any React trees and clear the jsdom document after every client test.
-// Without this, DOM rendered by one test can leak into the next when files share
-// a worker, causing "multiple elements found" flakes under parallelism.
+// Guarantee a clean DOM for every client test. `cleanup()` unmounts React trees
+// after each test, but portalled nodes (Radix Dialog/Select/Toast) or DOM from a
+// prior test file sharing the same worker can still linger — which caused
+// intermittent "multiple elements found" flakes (even failing the deploy gate).
+// Explicitly resetting document.body before each test makes isolation
+// deterministic regardless of what ran before.
+beforeEach(() => {
+  document.body.innerHTML = "";
+});
+
 afterEach(() => {
   cleanup();
 });
