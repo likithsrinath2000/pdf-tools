@@ -1,7 +1,12 @@
 import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
+  // Vite 8's esbuild honors tsconfig's `jsx: "preserve"`, so JSX must be
+  // transformed by the React plugin (matching the production build) rather than
+  // left for esbuild.
+  plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -12,15 +17,29 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    environmentMatchGlobs: [
-      ["client/**", "jsdom"],
-      ["server/**", "node"],
-      ["shared/**", "node"],
-    ],
-    include: [
-      "server/**/*.{test,spec}.{ts,tsx}",
-      "client/src/**/*.{test,spec}.{ts,tsx}",
-      "shared/**/*.{test,spec}.{ts,tsx}",
+    // Vitest 4 removed `environmentMatchGlobs`; per-directory environments are
+    // now expressed as projects. Each project inherits the root config
+    // (alias/globals/setup) via `extends: true`.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "client",
+          environment: "jsdom",
+          include: ["client/src/**/*.{test,spec}.{ts,tsx}"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: [
+            "server/**/*.{test,spec}.{ts,tsx}",
+            "shared/**/*.{test,spec}.{ts,tsx}",
+          ],
+        },
+      },
     ],
     coverage: {
       provider: "v8",
