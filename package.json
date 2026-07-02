@@ -111,9 +111,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "@replit/vite-plugin-cartographer": "^0.4.11",
+    "@replit/vite-plugin-cartographer": "^0.6.0",
     "@replit/vite-plugin-dev-banner": "^0.1.2",
-    "@replit/vite-plugin-runtime-error-modal": "^0.0.4",
+    "@replit/vite-plugin-runtime-error-modal": "^0.0.6",
     "@tailwindcss/vite": "^4.3.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
