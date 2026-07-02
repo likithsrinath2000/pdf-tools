@@ -90,7 +90,7 @@ export class ImageService {
     }
   }
 
-  async getImageMetadata(inputPath: string): Promise<sharp.Metadata> {
+  async getImageMetadata(inputPath: string): Promise<import('sharp').Metadata> {
     return await sharp(inputPath).metadata();
   }
 }
