@@ -313,8 +313,8 @@ function MergeEditorComponent({ files, onReorder, onRemove, onPageOrderChange }:
               </div>
             </div>
           ) : (
-            <div className="flex gap-6">
-              <div className="flex-1 max-h-[500px] overflow-y-auto pr-2">
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex-1 min-w-0 max-h-[500px] overflow-y-auto pr-2">
                 <Reorder.Group 
                   axis="y" 
                   values={pages} 
@@ -375,7 +375,7 @@ function MergeEditorComponent({ files, onReorder, onRemove, onPageOrderChange }:
                 </Reorder.Group>
               </div>
 
-              <div className="w-[300px] shrink-0 sticky top-0">
+              <div className="hidden md:block w-[300px] shrink-0 sticky top-0">
                 <div className="bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 p-4 h-[400px] flex flex-col items-center justify-center">
                   {hoveredPage ? (
                     <>
