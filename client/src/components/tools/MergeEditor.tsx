@@ -106,7 +106,8 @@ function MergeEditorComponent({ files, onReorder, onRemove, onPageOrderChange }:
           
           try {
             const arrayBuffer = await file.arrayBuffer();
-            const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdfDoc = await loadingTask.promise;
             const pageCount = pdfDoc.numPages;
             totalPages += pageCount;
             
@@ -154,7 +155,7 @@ function MergeEditorComponent({ files, onReorder, onRemove, onPageOrderChange }:
               }
             }
             
-            pdfDoc.destroy();
+            await loadingTask.destroy();
           } catch (err) {
             console.error(`Error reading PDF ${file.name}:`, err);
             infos.push({ file, index: fIndex, pageCount: 1, thumbnail: null });

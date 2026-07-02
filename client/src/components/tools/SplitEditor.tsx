@@ -65,7 +65,8 @@ export function SplitEditor({ files, onOptionsChange }: SplitEditorProps) {
       try {
         const file = files[0];
         const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdfDoc = await loadingTask.promise;
         const pageInfos: PageInfo[] = [];
         
         for (let i = 1; i <= pdfDoc.numPages; i++) {
@@ -78,7 +79,7 @@ export function SplitEditor({ files, onOptionsChange }: SplitEditorProps) {
         }
         setPages(pageInfos);
         processedFileRef.current = fileKey;
-        pdfDoc.destroy();
+        await loadingTask.destroy();
       } catch (err) {
         console.error("Error loading PDF:", err);
       } finally {
