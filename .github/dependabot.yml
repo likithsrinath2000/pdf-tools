@@ -1,8 +1,14 @@
 # Dependabot configuration.
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
-# Goal: keep dependency-update noise to a single daily PR by grouping *all* npm
-# updates (version and security) together instead of one PR per package.
+# Goal: keep dependency-update noise low by grouping npm updates into a single
+# daily PR, while keeping that PR safe to auto-merge:
+#   * routine minor/patch bumps are grouped together (npm-all);
+#   * security fixes are grouped together (npm-security);
+#   * MAJOR version bumps are NOT grouped — they land as individual PRs so each
+#     gets deliberate review (a single breaking major must never block the group);
+#   * the known-breaking build-tool majors are ignored entirely until a dedicated
+#     migration PR handles them (see ignore list below).
 
 version: 2
 updates:
@@ -15,13 +21,29 @@ updates:
     # A group counts as one PR; this cap is a safety valve, not a per-package limit.
     open-pull-requests-limit: 5
     groups:
-      # All routine version bumps (major/minor/patch, prod + dev) in one PR.
+      # Routine minor/patch bumps (prod + dev) in one PR. Majors are excluded so
+      # a single breaking major can't fail the whole grouped PR.
       npm-all:
         applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
-      # All security fixes batched into one PR as well.
+      # Security fixes batched into one PR.
       npm-security:
         applies-to: security-updates
         patterns:
           - "*"
+    ignore:
+      # Major bumps of the build/test toolchain break the current test suite and
+      # need a deliberate migration (vitest 2->4, vite 7->8, esbuild). Ignore
+      # their majors for now; remove these once migrated.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-major"]
